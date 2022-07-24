@@ -1,26 +1,10 @@
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/BeaconManager.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/UnitManager.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/util/recipes.lua" )
 
 dofile("GameCommands.lua")
 
 Game = class( nil )
-
-local data = sm.json.open("$SURVIVAL_DATA/Harvestables/Database/HarvestableSets/hvs_trees.json")
-local final_string = "\nlocal hvs_table =\n{\n"
-for k, v in pairs(data.harvestableList) do
-	final_string = final_string.."\t{ sm.uuid.new(\""..tostring(v.uuid).."\"), { "
-
-	for i, a in pairs(v.color) do
-		if i > 1 then
-			final_string = final_string..", "
-		end
-		final_string = final_string.."0x"..a
-	end
-
-	final_string = final_string.." }, "..#v.color.." }, --"..v.name.."\n"
-end
-final_string = final_string.."}"
-print(final_string)
 
 function Game.server_onCreate( self )
 	print("Game.server_onCreate")
@@ -40,9 +24,24 @@ function Game.server_onCreate( self )
 
 	g_unitManager = UnitManager()
 	g_unitManager:sv_onCreate(nil, { aggroCreations = true })
+
+	g_disableScrapHarvest = true
+
+	--LoadCraftingRecipes
+	self:g_loadCraftingRecipes()
+end
+
+function Game:g_loadCraftingRecipes()
+	LoadCraftingRecipes({
+		craftbot = "$SURVIVAL_DATA/CraftingRecipes/craftbot.json"
+	})
 end
 
 function Game:client_onCreate()
+	if not sm.isHost then
+		self:g_loadCraftingRecipes()
+	end
+
 	gc_cl_bindChatCommands()
 
 	self.network:sendToServer("sv_n_requestTime")
@@ -97,32 +96,6 @@ end
 function Game:cl_n_receiveTime(time_data)
 	self.cl_time = time_data[1]
 	self.cl_time_progress = time_data[2]
-end
-
-function Game:sv_n_setTimeProgress(new_progress)
-	if new_progress then
-		self.sv.saved.time_progress = new_progress
-	else
-		self.sv.saved.time_progress = not self.sv.saved.time_progress
-	end
-
-	self:server_saveAndSyncTime()
-	self.network:sendToClients("cl_n_onTimeProgressChange", self.sv.saved.time_progress)
-end
-
-function Game:cl_n_onTimeProgressChange(new_state)
-	sm.gui.chatMessage("Time Progress Changed to "..cf_boolToString[new_state])
-end
-
-function Game:cl_n_onTimeChangeMsg(new_time)
-	sm.gui.chatMessage(("Time set to #ffff00%.3f#ffffff"):format(new_time))
-end
-
-function Game:sv_n_setTime(new_time)
-	self.sv.saved.time = new_time
-
-	self:server_saveAndSyncTime()
-	self.network:sendToClients("cl_n_onTimeChangeMsg", new_time)
 end
 
 function Game:cl_onChatCommand(params)
@@ -196,4 +169,93 @@ function Game:sv_e_unloadBeacon(params)
 	else
 		sm.log.warning("Game:sv_e_unloadBeacon in a world that doesn't exist")
 	end
+end
+
+--CommandCallbacks
+function Game:cl_n_onTimeProgressChange(new_state)
+	sm.gui.chatMessage("Time Progress Changed to "..cf_boolToString[new_state])
+end
+
+function Game:sv_n_setTimeProgress(new_progress)
+	if new_progress then
+		self.sv.saved.time_progress = new_progress
+	else
+		self.sv.saved.time_progress = not self.sv.saved.time_progress
+	end
+
+	self:server_saveAndSyncTime()
+	self.network:sendToClients("cl_n_onTimeProgressChange", self.sv.saved.time_progress)
+end
+
+function Game:cl_n_onTimeChangeMsg(new_time)
+	sm.gui.chatMessage(("Time set to #ffff00%.3f#ffffff"):format(new_time))
+end
+
+function Game:sv_n_setTime(new_time)
+	self.sv.saved.time = new_time
+
+	self:server_saveAndSyncTime()
+	self.network:sendToClients("cl_n_onTimeChangeMsg", new_time)
+end
+
+function Game:cl_n_setAggroMessage(aggro)
+	sm.gui.chatMessage("AGGRO: "..(aggro and "On" or "Off"))
+end
+
+function Game:sv_n_setAggro(params)
+	local aggro = not sm.game.getEnableAggro()
+	if type(params) == "boolean" then
+		aggro = not params
+	end
+
+	sm.game.setEnableAggro(aggro)
+	self.network:sendToClients("cl_n_setAggroMessage", aggro)
+end
+
+function Game:cl_n_setAggroCreationsMsg(aggro_creations)
+	sm.gui.chatMessage("AGGRO CREATIONS: "..(aggro_creations and "On" or "Off"))
+end
+
+function Game:sv_n_setAggroCreations(params)
+	local aggroCreations = not g_unitManager:sv_getHostSettings().aggroCreations
+	if type(params) == "boolean" then
+		aggroCreations = not params
+	end
+
+	g_unitManager:sv_setHostSettings({ aggroCreations = aggroCreations })
+	self.network:sendToClients("cl_n_setAggroCreationsMsg")
+end
+
+function Game:sv_n_popCapsules(params)
+	g_unitManager:sv_openCapsules(params)
+end
+
+function Game:sv_n_aggroAllUnits(params, caller)
+	local pl_char = caller.character
+	if pl_char and sm.exists(pl_char) then
+		local params = { [1] = "/aggroall", player = caller }
+		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_onChatCommand", params)
+	end
+end
+
+function Game:sv_n_killAllUnits(params, caller)
+	local pl_char = caller.character
+	if pl_char and sm.exists(pl_char) then
+		local params = { [1] = "/killall", player = caller }
+		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_onChatCommand", params)
+	end
+end
+
+function Game:cl_n_toggleDropScrapMsg(drop_scrap)
+	sm.gui.chatMessage("SCRAP LOOT: "..(drop_scrap and "Off" or "On"))
+end
+
+function Game:sv_n_toggleDropScrap(params)
+	local disableScrapHarvest = not g_disableScrapHarvest
+	if type(params) == "boolean" then
+		disableScrapHarvest = not params
+	end
+
+	g_disableScrapHarvest = disableScrapHarvest
+	self.network:sendToClients("cl_n_toggleDropScrapMsg", disableScrapHarvest)
 end

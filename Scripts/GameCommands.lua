@@ -53,6 +53,30 @@ local function gc_set_time_progress(self, params)
 	self.network:sendToServer("sv_n_setTimeProgress", params[1])
 end
 
+local function gc_vanilla_set_no_aggro(self, params)
+	self.network:sendToServer("sv_n_setAggro", params[1])
+end
+
+local function gc_vanilla_set_no_aggro_creations(self, params)
+	self.network:sendToServer("sv_n_setAggroCreations", params[1])
+end
+
+local function gc_vanilla_pop_capsules(self, params)
+	self.network:sendToServer("sv_n_popCapsules", params[1])
+end
+
+local function gc_vanilla_aggro_all_units(self, params)
+	self.network:sendToServer("sv_n_aggroAllUnits")
+end
+
+local function gc_vanilla_kill_all_units(self, params)
+	self.network:sendToServer("sv_n_killAllUnits")
+end
+
+local function gc_vanilla_toggle_drop_scrap(self, params)
+	self.network:sendToServer("sv_n_toggleDropScrap", params[1])
+end
+
 local gc_command_list =
 {
 	["/clear"] = {
@@ -81,6 +105,36 @@ local gc_command_list =
 		desc = "Determines whether the time should progress or not.",
 		args = { { "bool", "should progress", true } },
 		func = gc_set_time_progress
+	},
+
+	--Vanilla Commands
+	["/noaggro"] = {
+		desc = "Toggles the player as a target",
+		args = { { "bool", "enable", true } },
+		func = gc_vanilla_set_no_aggro
+	},
+	["/noaggrocreations"] = {
+		desc = "Toggles whether the Tapebots will shoot at creations",
+		args = { { "bool", "enable", true } },
+		func = gc_vanilla_set_no_aggro_creations
+	},
+	["/popcapsules"] = {
+		desc = "Opens all capsules. An optional filter controls which type of capsules to open: 'bot', 'animal'",
+		args = { { "string", "filter", true } },
+		func = gc_vanilla_pop_capsules
+	},
+	["/aggroall"] = {
+		desc = "All hostile units will be made aware of the player's position",
+		func = gc_vanilla_aggro_all_units
+	},
+	["/killall"] = {
+		desc = "Kills all spawned units",
+		func = gc_vanilla_kill_all_units
+	},
+	["/dropscrap"] = {
+		desc = "Toggles the scrap loot from Haybots",
+		args = { { "bool", "enable", true } },
+		func = gc_vanilla_toggle_drop_scrap
 	}
 }
 
