@@ -17,6 +17,7 @@ function Game.server_onCreate( self )
 
 		self.sv.saved.time = 0.2
 		self.sv.saved.time_progress = true
+		self.sv.saved.version = 1
 	end
 
 	g_beaconManager = BeaconManager()
