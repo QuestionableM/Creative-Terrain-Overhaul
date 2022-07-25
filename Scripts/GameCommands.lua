@@ -144,6 +144,10 @@ local gc_command_list =
 		desc = "Toggles the scrap loot from Haybots",
 		args = { { "bool", "enable", true } },
 		func = gc_vanilla_toggle_drop_scrap
+	},
+	["/place"] = {
+		desc = "",
+		func = nil
 	}
 }
 

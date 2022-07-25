@@ -247,8 +247,8 @@ end
 local water_asset_uuid = sm.uuid.new( "990cce84-a683-4ea6-83cc-d0aee5e71e15" )
 local _table_insert = table.insert
 local _water_quaternion = sm.quat.new( 0.7071067811865475, 0.0, 0.0, 0.7071067811865475 )
-local _water_position = sm.vec3.new(32, 32, -33)
-local _water_scale = sm.vec3.new(64, 30, 64)
+local _water_position = sm.vec3.new(32, 32, -38)
+local _water_scale = sm.vec3.new(64, 40, 64)
 function AddWaterAsset(table)
 	_table_insert(table, {
 		rot = _water_quaternion,
