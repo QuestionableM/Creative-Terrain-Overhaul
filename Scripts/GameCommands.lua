@@ -101,6 +101,17 @@ local function gc_regenerate_world_yes_callback(self)
 end
 
 local function gc_regenerate_world(self, params)
+	local version_param = params[1]
+	if version_param < 0 then
+		cf_errorChatMessage("Invalid version value: minimum = #ffff000#ffffff")
+		return
+	end
+
+	if version_param > CREATIVE_TERRAIN_OVERHAUL_VERSION then
+		cf_errorChatMessage("Invalid version value: maximum = #ffff00"..CREATIVE_TERRAIN_OVERHAUL_VERSION.."#ffffff")
+		return
+	end
+
 	local cl_confirmDiag = sm.gui.createGuiFromLayout("$GAME_DATA/Gui/Layouts/PopUp/PopUp_YN.layout")
 	cl_confirmDiag:setButtonCallback("Yes", "cl_diag_onButtonCallback")
 	cl_confirmDiag:setButtonCallback("No", "cl_diag_onButtonCallback")
