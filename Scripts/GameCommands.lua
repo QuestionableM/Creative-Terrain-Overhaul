@@ -95,6 +95,30 @@ local function gc_vanilla_place_harvestable(self, params)
 	self.network:sendToServer("sv_n_placeHarvestable", param_data)
 end
 
+local function gc_regenerate_world_yes_callback(self)
+	self.network:sendToServer("sv_n_regenerateWorld", self.tmp_gen_params)
+	self.tmp_gen_params = nil
+end
+
+local function gc_regenerate_world(self, params)
+	local cl_confirmDiag = sm.gui.createGuiFromLayout("$GAME_DATA/Gui/Layouts/PopUp/PopUp_YN.layout")
+	cl_confirmDiag:setButtonCallback("Yes", "cl_diag_onButtonCallback")
+	cl_confirmDiag:setButtonCallback("No", "cl_diag_onButtonCallback")
+	cl_confirmDiag:setOnCloseCallback("cl_diag_onCloseCallback")
+	cl_confirmDiag:setText("Title", "Regenerate World")
+	cl_confirmDiag:setText("Message", "#888888Are you sure that you want to regenerate the world? #ffff00All#888888 unsaved creations will be lost!")
+	cl_confirmDiag:open()
+
+	self.tmp_gen_params = params
+
+	self.tmp_confirmDiag = cl_confirmDiag
+	self.tmp_diag_yes_callback = gc_regenerate_world_yes_callback
+end
+
+local function gc_get_world_seed(self, params)
+	self.network:sendToServer("sv_n_getTerrainSeed")
+end
+
 local gc_command_list =
 {
 	["/clear"] = {
@@ -128,6 +152,16 @@ local gc_command_list =
 		desc = "Makes your character fly in the air",
 		--args = { { "int", "fly speed", true } },
 		func = gc_set_character_fly
+	},
+	["/regenerate"] = {
+		desc = "Regenerates the world. Has 1 optional argument (generator version): 1, 2",
+		args = { { "int", "version (auto = 0)", true }, { "int", "seed (optional)", true } },
+		func = gc_regenerate_world,
+		host_only = true
+	},
+	["/seed"] = {
+		desc = "Gets the seed of and the version of the current terrain generation.",
+		func = gc_get_world_seed
 	},
 
 	--Vanilla Commands
@@ -167,8 +201,13 @@ local gc_command_list =
 }
 
 function gc_cl_bindChatCommands()
+	local is_host = sm.isHost
+
 	for com_name, data in pairs(gc_command_list) do
-		sm.game.bindChatCommand(com_name, data.args or {}, "cl_onChatCommand", data.desc)
+		local host_only = data.host_only
+		if not host_only or (is_host and host_only) then
+			sm.game.bindChatCommand(com_name, data.args or {}, "cl_onChatCommand", data.desc)
+		end
 	end
 end
 

@@ -7,7 +7,7 @@ dofile("GameCommands.lua")
 ---@class GameClass
 Game = class( nil )
 
-local CREATIVE_TERRAIN_OVERHAUL_VERSION = 2
+CREATIVE_TERRAIN_OVERHAUL_VERSION = 2
 
 function Game.server_onCreate( self )
 	print("Game.server_onCreate")
@@ -16,12 +16,16 @@ function Game.server_onCreate( self )
 	self.sv.saved = self.storage:load()
 	if self.sv.saved == nil then
 		self.sv.saved = {}
-		self.sv.saved.world = sm.world.createWorld( "$CONTENT_DATA/Scripts/World.lua", "WorldVer2", {}, math.random(os.time()) )
-		self.storage:save( self.sv.saved )
+
+		self.sv.saved.seed = math.random(os.time())
+		self.sv.saved.world = sm.world.createWorld( "$CONTENT_DATA/Scripts/World.lua", "WorldVer2", {}, self.sv.saved.seed )
 
 		self.sv.saved.time = 0.2
 		self.sv.saved.time_progress = true
+
 		self.sv.saved.version = 2
+
+		self.storage:save( self.sv.saved )
 	end
 
 	g_beaconManager = BeaconManager()
@@ -366,4 +370,82 @@ function Game:sv_n_placeHarvestable(params, caller)
 	if pl_char and sm.exists(pl_char) then
 		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_placeHvs", params)
 	end
+end
+
+local available_world_classes =
+{
+	[1] = "World",
+	[2] = "WorldVer2"
+}
+
+function Game:sv_n_regenerateWorld(data)
+	local generator_version = CREATIVE_TERRAIN_OVERHAUL_VERSION
+	local generator_seed = math.random(os.time())
+
+	local gen_ver = data[1]
+	if type(gen_ver) == "number" then
+		local tmp_ver = gen_ver
+		if tmp_ver < 1 or tmp_ver > CREATIVE_TERRAIN_OVERHAUL_VERSION then
+			tmp_ver = CREATIVE_TERRAIN_OVERHAUL_VERSION
+		end
+
+		generator_version = tmp_ver
+	end
+
+	local gen_seed = data[2]
+	if type(gen_seed) == "number" then
+		generator_seed = gen_seed
+	end
+
+	--Destroy the old world
+	local old_world = self.sv.saved.world
+	if old_world and sm.exists(old_world) then
+		old_world:destroy()
+	end
+	
+	--Change and save the world settings
+	local world_class = available_world_classes[generator_version]
+	self.sv.saved.seed = generator_seed
+	self.sv.saved.world = sm.world.createWorld("$CONTENT_DATA/Scripts/World.lua", world_class, {}, generator_seed)
+	self.sv.saved.version = generator_version
+	self.storage:save(self.sv.saved)
+
+	local player_list = sm.player.getAllPlayers()
+	for k, cur_pl in pairs(player_list) do
+		self:server_onPlayerJoined(cur_pl, true)
+	end
+end
+
+function Game:cl_n_displaySeedData(data)
+	local terrain_ver  = data[1]
+	local terrain_seed = data[2]
+
+	local seed_string = "Couldn't get the seed (old save version)"
+	if type(terrain_seed) == "number" then
+		seed_string = tostring(terrain_seed)
+	end
+
+	sm.gui.chatMessage(("[#ffff00TerrainOverhaul#ffffff] Terrain Data:\nSeed: #ffff00%s#ffffff\nVersion: #ffff00%s#ffffff"):format(seed_string, terrain_ver))
+end
+
+--Seed doesn't exist in older save versions
+function Game:sv_n_getTerrainSeed(data, caller)
+	local sv_saved = self.sv.saved
+	local terrain_data = { sv_saved.version, sv_saved.seed }
+
+	self.network:sendToClient(caller, "cl_n_displaySeedData", terrain_data)
+end
+
+--Confirm Dialog Callbacks
+function Game:cl_diag_onButtonCallback(button)
+	if button == "Yes" then
+		self.tmp_diag_yes_callback(self)
+	end
+
+	self.tmp_confirmDiag:close()
+end
+
+function Game:cl_diag_onCloseCallback()
+	self.tmp_confirmDiag:destroy()
+	self.tmp_diag_yes_callback = nil
 end
