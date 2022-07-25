@@ -175,18 +175,69 @@ function World:server_onCollision(objectA, objectB, collisionPosition, objectAPo
 	g_unitManager:sv_onWorldCollision(self, objectA, objectB, collisionPosition, objectAPointVelocity, objectBPointVelocity, collisionNormal)
 end
 
---Commands
-function World:sv_e_onChatCommand(params)
-	if params[1] == "/aggroall" then
-		local units = sm.unit.getAllUnits()
-		for _, unit in ipairs( units ) do
-			sm.event.sendToUnit( unit, "sv_e_receiveTarget", { targetCharacter = params.player.character } )
-		end
-		sm.gui.chatMessage( "Hostiles received " .. params.player:getName() .. "'s position." )
-	elseif params[1] == "/killall" then
-		local units = sm.unit.getAllUnits()
-		for _, unit in ipairs( units ) do
-			unit:destroy()
+function World:sv_e_aggroAll(player)
+	local units = sm.unit.getAllUnits()
+	for _, unit in ipairs(units) do
+		sm.event.sendToUnit(unit, "sv_e_receiveTarget", { targetCharacter = player.character })
+	end
+
+	sm.gui.chatMessage("Hostiles received "..player:getName().."'s position.")
+end
+
+function World:sv_e_killAll()
+	local units = sm.unit.getAllUnits()
+	for _, unit in ipairs(units) do
+		unit:destroy()
+	end
+end
+
+local function selectHarvestableToPlace( keyword )
+	if keyword == "stone" then
+		local stones = {
+			hvs_stone_small01, hvs_stone_small02, hvs_stone_small03
+			--hvs_stone_medium01, hvs_stone_medium02, hvs_stone_medium03,
+			--hvs_stone_large01, hvs_stone_large02, hvs_stone_large03
+		}
+		return stones[math.random( 1, #stones )]
+	elseif keyword == "tree" then
+		local trees = {
+			hvs_tree_birch01, hvs_tree_birch02, hvs_tree_birch03,
+			hvs_tree_leafy01, hvs_tree_leafy02, hvs_tree_leafy03,
+			hvs_tree_spruce01, hvs_tree_spruce02, hvs_tree_spruce03,
+			hvs_tree_pine01, hvs_tree_pine02, hvs_tree_pine03
+		}
+		return trees[math.random( 1, #trees )]
+	elseif keyword == "birch" then
+		local trees = { hvs_tree_birch01, hvs_tree_birch02, hvs_tree_birch03 }
+		return trees[math.random( 1, #trees )]
+	elseif keyword == "leafy" then
+		local trees = { hvs_tree_leafy01, hvs_tree_leafy02, hvs_tree_leafy03 }
+		return trees[math.random( 1, #trees )]
+	elseif keyword == "spruce" then
+		local trees = {	hvs_tree_spruce01, hvs_tree_spruce02, hvs_tree_spruce03 }
+		return trees[math.random( 1, #trees )]
+	elseif keyword == "pine" then
+		local trees = { hvs_tree_pine01, hvs_tree_pine02, hvs_tree_pine03 }
+		return trees[math.random( 1, #trees )]
+	end
+	return nil
+end
+
+function World:sv_e_placeHvs(params)
+	local harvestableUuid = selectHarvestableToPlace( params[1] )
+	local aim_pos = params[2]
+	if harvestableUuid and aim_pos then
+		local from = aim_pos + sm.vec3.new( 0, 0, 16.0 )
+		local to = aim_pos - sm.vec3.new( 0, 0, 16.0 )
+		local success, result = sm.physics.raycast( from, to, nil, sm.physics.filter.default )
+		if success and result.type == "terrainSurface" then
+			local harvestableYZRotation = sm.vec3.getRotation( sm.vec3.new( 0, 1, 0 ), sm.vec3.new( 0, 0, 1 ) )
+			local harvestableRotation = sm.quat.fromEuler( sm.vec3.new( 0, math.random( 0, 359 ), 0 ) )
+			local placePosition = result.pointWorld
+			if params[2] == "stone" then
+				placePosition = placePosition + sm.vec3.new( 0, 0, 2.0 )
+			end
+			sm.harvestable.createHarvestable( harvestableUuid, placePosition, harvestableYZRotation * harvestableRotation )
 		end
 	end
 end

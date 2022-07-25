@@ -81,6 +81,20 @@ local function gc_set_character_fly(self, params)
 	self.network:sendToServer("sv_n_toggleFlyMode", params[1])
 end
 
+local function gc_vanilla_place_harvestable(self, params)
+	local param_data = { [1] = params[1] }
+
+	local range = 7.5
+	local success, result = sm.localPlayer.getRaycast(range)
+	if success then
+		param_data[2] = result.pointWorld
+	else
+		param_data[2] = sm.localPlayer.getRaycastStart() + sm.localPlayer.getDirection() * range
+	end
+
+	self.network:sendToServer("sv_n_placeHarvestable", param_data)
+end
+
 local gc_command_list =
 {
 	["/clear"] = {
@@ -146,8 +160,9 @@ local gc_command_list =
 		func = gc_vanilla_toggle_drop_scrap
 	},
 	["/place"] = {
-		desc = "",
-		func = nil
+		desc = "Places a harvestable at the aimed position. Must be placed on the ground. The harvestable parameter controls which harvestable to place: 'stone', 'tree', 'birch', 'leafy', 'spruce', 'pine'",
+		args = { { "string", "harvestable", false } },
+		func = gc_vanilla_place_harvestable
 	}
 }
 

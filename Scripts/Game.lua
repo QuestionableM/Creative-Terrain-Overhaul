@@ -310,16 +310,14 @@ end
 function Game:sv_n_aggroAllUnits(params, caller)
 	local pl_char = caller.character
 	if pl_char and sm.exists(pl_char) then
-		local params = { [1] = "/aggroall", player = caller }
-		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_onChatCommand", params)
+		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_aggroAll", caller)
 	end
 end
 
 function Game:sv_n_killAllUnits(params, caller)
 	local pl_char = caller.character
 	if pl_char and sm.exists(pl_char) then
-		local params = { [1] = "/killall", player = caller }
-		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_onChatCommand", params)
+		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_killAll")
 	end
 end
 
@@ -359,5 +357,13 @@ function Game:sv_n_toggleFlyMode(params, caller)
 		pl_char:setMovementSpeedFraction(movement_speed)]]
 
 		self.network:sendToClient(caller, "cl_n_toggleFlyMsg", is_swimming)
+	end
+end
+
+---@param caller Player Caller.
+function Game:sv_n_placeHarvestable(params, caller)
+	local pl_char = caller.character
+	if pl_char and sm.exists(pl_char) then
+		sm.event.sendToWorld(pl_char:getWorld(), "sv_e_placeHvs", params)
 	end
 end
