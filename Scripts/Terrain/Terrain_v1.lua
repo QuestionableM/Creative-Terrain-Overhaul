@@ -1,8 +1,12 @@
+--[[
+	Copyright (c) 2022
+	Questionable Mark
+]]
+
 dofile("$SURVIVAL_DATA/Scripts/terrain/terrain_util2.lua")
-dofile("$SURVIVAL_DATA/scripts/terrain/overworld/tile_database.lua")
 
 function Init()
-	print( "Init terrain" )
+	print("Init Terrain v1")
 
 	g_terrainCellCacheX = {}
 	g_terrainCellCacheY = {}
@@ -158,7 +162,7 @@ function GetMaterialAt( x, y, lod )
 		return 1, 0, 0, 0, 0, 0, 0, 0
 	end
 
-	return 0, 0, 0, 0, 0, 0, 0, 1
+	return 0, 0, 0, 0, 0, 0, 0, 0
 end
 
 local ground_clutter = { -1, 9, 0, 15, 19, 14, 20, 22 }

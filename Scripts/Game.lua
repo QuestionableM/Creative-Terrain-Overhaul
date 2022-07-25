@@ -4,20 +4,24 @@ dofile( "$SURVIVAL_DATA/Scripts/game/util/recipes.lua" )
 
 dofile("GameCommands.lua")
 
+---@class GameClass
 Game = class( nil )
+
+local CREATIVE_TERRAIN_OVERHAUL_VERSION = 2
 
 function Game.server_onCreate( self )
 	print("Game.server_onCreate")
+
 	self.sv = {}
 	self.sv.saved = self.storage:load()
 	if self.sv.saved == nil then
 		self.sv.saved = {}
-		self.sv.saved.world = sm.world.createWorld( "$CONTENT_DATA/Scripts/World.lua", "World", {}, math.random(os.time()) )
+		self.sv.saved.world = sm.world.createWorld( "$CONTENT_DATA/Scripts/World.lua", "WorldVer2", {}, math.random(os.time()) )
 		self.storage:save( self.sv.saved )
 
 		self.sv.saved.time = 0.2
 		self.sv.saved.time_progress = true
-		self.sv.saved.version = 1
+		self.sv.saved.version = 2
 	end
 
 	g_beaconManager = BeaconManager()
@@ -38,6 +42,77 @@ function Game:g_loadCraftingRecipes()
 	})
 end
 
+function Game:cl_n_versionMismatch(id)
+	self.cl_version_mismatch = id
+	if self.cl_is_loaded then
+		self:client_displayVersionMismatch()
+	end
+end
+
+function Game:cl_n_newVersionAvailable()
+	self.cl_new_version_available = true
+	if self.cl_is_loaded then
+		self:client_displayNewVersionAvailableMsg()
+	end
+end
+
+local version_mismatch_code =
+{
+	client_outdated = 1,
+	server_outdated = 2
+}
+
+local version_mismatch_messages =
+{
+	[version_mismatch_code.client_outdated] = {
+		chat = "[#ffff00TerrainOverhaul#ffffff] #ffff00WARNING#ffffff: Your custom game version is outdated. Please update the custom game.",
+		alert = "#ffff00WARNING#ffffff: Your custom game version is outdated.\nPlease update the custom game."
+	},
+	[version_mismatch_code.server_outdated] = {
+		chat = "[#ffff00TerrainOverhaul#ffffff] #ffff00WARNING#ffffff: Server host has outdated version of custom game. Tell the host to update the custom game.",
+		alert = "#ffff00WARNING#ffffff: Server host has outdated version of custom game.\nTell the host to update the custom game."
+	}
+}
+
+function Game:client_displayVersionMismatch()
+	local msg_data = version_mismatch_messages[self.cl_version_mismatch]
+
+	sm.gui.chatMessage(msg_data.chat)
+	sm.gui.displayAlertText(msg_data.alert, 10)
+end
+
+function Game:client_displayNewVersionAvailableMsg()
+	sm.gui.chatMessage("[#ffff00TerrainOverhaul#ffffff] New version of terrain generation is available! You can try the newest version by creating a new world.")
+end
+
+function Game:sv_n_checkVersion(version, caller)
+	if version ~= CREATIVE_TERRAIN_OVERHAUL_VERSION then
+		if version < CREATIVE_TERRAIN_OVERHAUL_VERSION then
+			self.network:sendToClient(caller, "cl_n_versionMismatch", version_mismatch_code.client_outdated)
+		elseif version > CREATIVE_TERRAIN_OVERHAUL_VERSION then
+			self.network:sendToClient(caller, "cl_n_versionMismatch", version_mismatch_code.server_outdated)
+		end
+
+		return
+	end
+
+	if self.sv.saved.version < CREATIVE_TERRAIN_OVERHAUL_VERSION then
+		self.network:sendToClient(caller, "cl_n_newVersionAvailable")
+	end
+end
+
+function Game:client_onLoadingScreenLifted()
+	self.cl_is_loaded = true
+
+	if self.cl_version_mismatch ~= nil then
+		self:client_displayVersionMismatch()
+	end
+
+	if self.cl_new_version_available ~= nil then
+		self:client_displayNewVersionAvailableMsg()
+	end
+end
+
 function Game:client_onCreate()
 	if not sm.isHost then
 		self:g_loadCraftingRecipes()
@@ -46,6 +121,7 @@ function Game:client_onCreate()
 	gc_cl_bindChatCommands()
 
 	self.network:sendToServer("sv_n_requestTime")
+	self.network:sendToServer("sv_n_checkVersion", CREATIVE_TERRAIN_OVERHAUL_VERSION)
 
 	self.cl_time_progress = true
 	self.cl_time = 0.3
