@@ -4,6 +4,7 @@ dofile( "$SURVIVAL_DATA/Scripts/game/managers/WaterManager.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_harvestable.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_projectiles.lua" )
 
+---@class WorldClass
 World = class( nil )
 World.terrainScript = "$CONTENT_DATA/Scripts/Terrain/Terrain_v1.lua"
 World.cellMinX = -101

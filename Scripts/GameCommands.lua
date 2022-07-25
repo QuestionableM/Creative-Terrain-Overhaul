@@ -77,6 +77,10 @@ local function gc_vanilla_toggle_drop_scrap(self, params)
 	self.network:sendToServer("sv_n_toggleDropScrap", params[1])
 end
 
+local function gc_set_character_fly(self, params)
+	self.network:sendToServer("sv_n_toggleFlyMode", params[1])
+end
+
 local gc_command_list =
 {
 	["/clear"] = {
@@ -105,6 +109,11 @@ local gc_command_list =
 		desc = "Determines whether the time should progress or not.",
 		args = { { "bool", "should progress", true } },
 		func = gc_set_time_progress
+	},
+	["/fly"] = {
+		desc = "Makes your character fly in the air",
+		--args = { { "int", "fly speed", true } },
+		func = gc_set_character_fly
 	},
 
 	--Vanilla Commands

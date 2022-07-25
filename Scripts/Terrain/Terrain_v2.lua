@@ -167,11 +167,10 @@ local ground_clutter = { -1, 9, 0, 15, 19, 14, 20, 22 }
 local underwater_clutter =
 {
 	--id -> max_height
-	--{ 18, -470 },
 	{ -1, 0 },
-	{ 39, -474 },
-	{ 40, -476 },
-	{ 41, -500 }
+	{ 39, -24 },
+	{ 40, -26 },
+	{ 41, -30 }
 }
 
 local ground_clutter_sz = #ground_clutter

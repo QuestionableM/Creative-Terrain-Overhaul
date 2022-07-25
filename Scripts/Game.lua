@@ -336,3 +336,28 @@ function Game:sv_n_toggleDropScrap(params)
 	g_disableScrapHarvest = disableScrapHarvest
 	self.network:sendToClients("cl_n_toggleDropScrapMsg", disableScrapHarvest)
 end
+
+function Game:cl_n_toggleFlyMsg(is_swimming)
+	sm.gui.chatMessage("Fly: "..(is_swimming and "On" or "Off"))
+end
+
+---@param params table Params.
+---@param caller Player Caller.
+function Game:sv_n_toggleFlyMode(params, caller)
+	local pl_char = caller.character
+	if pl_char and sm.exists(pl_char) then
+		local is_swimming = not pl_char:isSwimming()
+
+		pl_char:setSwimming(is_swimming)
+		pl_char:setDiving(is_swimming)
+		
+		--[[local movement_speed = params and params[1] or 1
+		if movement_speed < 1 then
+			movement_speed = 1
+		end
+
+		pl_char:setMovementSpeedFraction(movement_speed)]]
+
+		self.network:sendToClient(caller, "cl_n_toggleFlyMsg", is_swimming)
+	end
+end
