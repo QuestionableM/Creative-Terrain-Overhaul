@@ -6,6 +6,11 @@ dofile("GameCommands.lua")
 
 ---@class GameClass
 Game = class( nil )
+Game.enableLimitedInventory = false
+Game.enableFuelConsumption = false
+Game.enableAmmoConsumption = false
+Game.enableRestrictions = true
+Game.enableUpgrade = true
 
 CREATIVE_TERRAIN_OVERHAUL_VERSION = 2
 

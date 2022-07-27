@@ -243,5 +243,6 @@ function World:sv_e_placeHvs(params)
 end
 
 --World versions
+---@type WorldClass
 WorldVer2 = class(World)
 WorldVer2.terrainScript = "$CONTENT_DATA/Scripts/Terrain/Terrain_v2.lua"
