@@ -5,8 +5,6 @@
 
 dofile("$SURVIVAL_DATA/Scripts/terrain/terrain_util2.lua")
 
-local WORLD_HEIGHT_OFFSET = 200
-
 function Init()
 	print("Init Terrain v2")
 
