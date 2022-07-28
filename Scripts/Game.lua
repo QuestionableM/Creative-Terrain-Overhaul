@@ -122,6 +122,45 @@ function Game:client_onLoadingScreenLifted()
 	end
 end
 
+--[[function Game:client_onRefresh()
+	local ground_asset_list =
+	{
+		{ sm.uuid.new("4bd88efa-949c-4c0b-8517-2f2b1b2bdb01"), { 0xb0a926ff, 0xf1ac28ff, 0xcd7d00ff }, 7, { leaves = 0 } }, --env_foliage_smallbirch01
+		{ sm.uuid.new("f741ad80-c99a-4cec-b67d-e53ec82a7bd0"), { 0xb0a926ff, 0xf1ac28ff, 0xcd7d00ff }, 7, { leaves = 0 } }, --env_foliage_smallbirch02
+		{ sm.uuid.new("09a5a0ee-0fd1-4b32-86c0-9e6f2b701546"), { 0xd8bc21ff, 0xd83f21ff }, 8, { leaves = 0 } }, --env_nature_foliage_wildbush01
+		{ sm.uuid.new("b1e1b1bf-6175-465e-81c6-9ec9d0bf83d0"), { 0xd8bc21ff, 0xd83f21ff }, 8, { leaves = 0 } }, --env_nature_foliage_wildbush02
+		{ sm.uuid.new("796cabcd-5703-42af-b4e9-512c85abcf59"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff }, 10, { leaves = 0 } }, --env_nature_foliage_buxus01
+		{ sm.uuid.new("df1a36a3-6be0-4681-845e-d89d6c80d1a6"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff }, 10, { leaves = 0 } }, --env_nature_foliage_buxus02
+		{ sm.uuid.new("73acaa1d-d208-450b-8159-99d5914bbcde"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff }, 10, { leaves = 0 } }, --env_nature_foliage_buxus03
+		{ sm.uuid.new("c63b9bff-0c25-460b-a1a3-af3161592170"), { 0x3f5900ff, 0x576828ff, 0x66552cff }, 11, { leaves = 0 } }, --env_nature_foliage_boxwood
+		{ sm.uuid.new("fd3844b5-58eb-4cb0-96d6-383b7fa83923"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff, 0xb1a803ff, 0xa1bc05ff }, 14, { leaves = 0 } }, --env_nature_foliage_columnshrub01
+		{ sm.uuid.new("fe134420-39cb-450b-9560-5d3401556f7a"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff, 0xb1a803ff, 0xa1bc05ff }, 14, { leaves = 0 } }, --env_nature_foliage_columnshrub02
+		{ sm.uuid.new("40ff23e6-3914-4d85-9048-fe012f72cba1"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff, 0xb1a803ff, 0xa1bc05ff }, 14, { leaves = 0 } }  --env_nature_foliage_columnshrub03
+	}
+
+	sm.gui.chatMessage("A list of colors:")
+	for i, v in pairs(ground_asset_list) do
+		local chat_msg = i..": #ffff00"..tostring(v[1]).."#ffffff:\n"
+
+		local color_table = v[2]
+		for k, a in pairs(color_table) do
+			if k > 1 then
+				chat_msg = chat_msg..","
+
+				if (k % 4) == 3 then
+					chat_msg = chat_msg.."\n"
+				end
+			end
+
+			local string_test = ("%08x"):format(a):sub(0, 6)
+			
+			chat_msg = chat_msg.."#"..string_test..string_test.."#ffffff"
+		end
+
+		sm.gui.chatMessage(chat_msg)
+	end
+end]]
+
 function Game:client_onCreate()
 	if not sm.isHost then
 		self:g_loadCraftingRecipes()

@@ -133,12 +133,12 @@ function GetColorAt( x, y, lod )
 	if isInFarLands(x, y) then
 		return 0.8, 0.8, 0.8
 	end
-
+	
+	local l_height = CalculateTerrainHeight(x, y)
 	if isInDesert(x, y) then
 		return 0.7, 0.6, 0.6
 	end
 
-	local l_height = CalculateTerrainHeight(x, y)
 	if isInWaterHeight(l_height) then
 		local _noise = _sm_noise_octaveNoise2d(x, y, 6, g_terrainSeed) * 0.15
 		return 0.71 + _noise, 0.753 + _noise, 0.788 + _noise
@@ -153,11 +153,19 @@ function GetColorAt( x, y, lod )
 end
 
 function GetMaterialAt( x, y, lod )
-	if isInFarLands(x, y) or isInDesert(x, y) then
+	if isInFarLands(x, y) then
 		return 0, 1, 0, 0, 0, 0, 0, 0
 	end
 
 	local mat_height = CalculateTerrainHeight(x, y)
+	if isInDesert(x, y) then
+		if isTooSteep(x, y, mat_height) then
+			return 0, 0.8, 0, 0, 0, 0.4, 0
+		end
+
+		return 0, 1, 0, 0, 0, 0, 0, 0
+	end
+
 	if isInWaterHeight(mat_height) then
 		return 0, 1, 0, 0, 0, 0, 0, 0
 	end
@@ -175,9 +183,9 @@ local underwater_clutter =
 {
 	--id -> max_height
 	{ -1, 0 },
-	{ 39, -24 },
-	{ 40, -26 },
-	{ 41, -30 }
+	{ 39, -21 },
+	{ 40, -23 },
+	{ 41, -27 }
 }
 
 local ground_clutter_sz = #ground_clutter
@@ -190,22 +198,6 @@ function GetClutterIdxAt( x, y )
 	local d_y = y * 0.5
 
 	if isInFarLands(d_x, d_y) then
-		return -1
-	end
-
-	if isInDesert(d_x, d_y) then
-		local desert_clutter =
-			_sm_noise_octaveNoise2d(d_x, d_y, 5, g_terrainSeed_192) *
-			_sm_noise_octaveNoise2d(d_x * 0.5, d_y * 0.5, 1, g_terrainSeed_45)
-
-		if desert_clutter > 0.2 then
-			local desert_clutter_noise = _sm_noise_octaveNoise2d(d_x, d_y, 2, g_terrainSeed_712)
-			local desert_clutter_idx = math.floor(desert_clutter_noise * 11.832) % desert_clutter_table_sz
-			local desert_clutter_id = desert_clutter_table[desert_clutter_idx + 1]
-
-			return desert_clutter_id
-		end
-
 		return -1
 	end
 
@@ -222,6 +214,22 @@ function GetClutterIdxAt( x, y )
 		--Compare max height with current height
 		if cur_clutter_data[2] > clutter_height then
 			return cur_clutter_data[1]
+		end
+
+		return -1
+	end
+
+	if isInDesert(d_x, d_y) then
+		local desert_clutter =
+			_sm_noise_octaveNoise2d(d_x, d_y, 5, g_terrainSeed_192) *
+			_sm_noise_octaveNoise2d(d_x * 0.5, d_y * 0.5, 1, g_terrainSeed_45)
+
+		if desert_clutter > 0.2 then
+			local desert_clutter_noise = _sm_noise_octaveNoise2d(d_x, d_y, 2, g_terrainSeed_712)
+			local desert_clutter_idx = math.floor(desert_clutter_noise * 11.832) % desert_clutter_table_sz
+			local desert_clutter_id = desert_clutter_table[desert_clutter_idx + 1]
+
+			return desert_clutter_id
 		end
 
 		return -1
@@ -260,8 +268,19 @@ local ground_rock_list =
 	{ sm.uuid.new("388fdf39-b223-4649-aceb-eb609aee87ef"), {}, 0, { rock = 0x6e7569ff } }, --env_rocks_rock08
 }
 
+local desert_vegetation_list =
+{
+	{ sm.uuid.new("09a5a0ee-0fd1-4b32-86c0-9e6f2b701546"), { 0xd8bc21ff, 0xd83f21ff }, 2, { leaves = 0 } }, --env_nature_foliage_wildbush01
+	{ sm.uuid.new("b1e1b1bf-6175-465e-81c6-9ec9d0bf83d0"), { 0xd8bc21ff, 0xd83f21ff }, 2, { leaves = 0 } }, --env_nature_foliage_wildbush02
+	{ sm.uuid.new("796cabcd-5703-42af-b4e9-512c85abcf59"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff }, 3, { leaves = 0 } }, --env_nature_foliage_buxus01
+	{ sm.uuid.new("df1a36a3-6be0-4681-845e-d89d6c80d1a6"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff }, 3, { leaves = 0 } }, --env_nature_foliage_buxus02
+	{ sm.uuid.new("73acaa1d-d208-450b-8159-99d5914bbcde"), { 0x797f12ff, 0xa8850fff, 0x7f4b0fff }, 3, { leaves = 0 } }, --env_nature_foliage_buxus03
+	{ sm.uuid.new("c63b9bff-0c25-460b-a1a3-af3161592170"), { 0x3f5900ff, 0x576828ff, 0x66552cff }, 3, { leaves = 0 } }  --env_nature_foliage_boxwood
+}
+
 local ground_asset_list_sz = #ground_asset_list
 local ground_rock_list_sz = #ground_rock_list
+local desert_vegetation_list_sz = #desert_vegetation_list
 
 function AssetNoise(x, y)
 	return _sm_noise_octaveNoise2d(x * 0.854, y * 0.854, 1, g_terrainSeed_92) *
@@ -338,15 +357,24 @@ function GetAssetsForCell( cellX, cellY, lod )
 
 		local asset_height = CalculateTerrainHeight(g_x, g_y)
 		if not isTooSteep(g_x, g_y, asset_height) then
-			if isInWaterHeight(asset_height) then
-				local asset_noise = AssetNoise(g_x, g_y)
-				if asset_noise > 0.4 then
-					AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, ground_rock_list, ground_rock_list_sz)
-				end	
+			if isInDesert(g_x, g_y) then
+				if not isInWaterHeight(asset_height) then
+					local asset_noise = AssetNoise(g_x, g_y)
+					if asset_noise > 0.125 then
+						AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, desert_vegetation_list, desert_vegetation_list_sz)
+					end
+				end
 			else
-				local asset_noise = AssetNoise(g_x, g_y)
-				if asset_noise > 0.3 then
-					AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, ground_asset_list, ground_asset_list_sz)
+				if isInWaterHeight(asset_height) then
+					local asset_noise = AssetNoise(g_x, g_y)
+					if asset_noise > 0.4 then
+						AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, ground_rock_list, ground_rock_list_sz)
+					end
+				else
+					local asset_noise = AssetNoise(g_x, g_y)
+					if asset_noise > 0.3 then
+						AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, ground_asset_list, ground_asset_list_sz)
+					end
 				end
 			end
 		end
@@ -461,7 +489,7 @@ function GetHarvestablesForCell( cellX, cellY, lod )
 		local g_y = y_pos + y_local
 
 		local hvs_height = CalculateTerrainHeight(g_x, g_y)
-		if not isInWaterHeight(hvs_height) and not isTooSteep(g_x, g_y, hvs_height) then
+		if not isInWaterHeight(hvs_height) and not isTooSteep(g_x, g_y, hvs_height) and not isInDesert(g_x, g_y) then
 			local hvs_noise = HarvestableNoise(g_x, g_y)
 			if (hvs_noise > 0.0002 and hvs_noise < 0.00026) or (hvs_noise > 0.3 and hvs_noise < 0.35) then
 				AddHarvestable(hvs_output, g_x, g_y, hvs_height + 2.0, x_local, y_local, hvs_rock_table, hvs_rock_table_sz)
