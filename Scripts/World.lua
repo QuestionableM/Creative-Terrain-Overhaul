@@ -99,12 +99,19 @@ function World:server_onProjectile(hitPos, hitTime, hitVelocity, _, attacker, da
 	end
 end
 
+function World:cl_n_worldCleanedMsg(bodies)
+	sm.gui.chatMessage("Successfully removed #ffff00"..bodies.."#ffffff bodies")
+end
+
 function World:sv_n_clearWorld()
-	for _, body in ipairs(sm.body.getAllBodies()) do
+	local bodies = sm.body.getAllBodies()
+	for _, body in ipairs(bodies) do
 		for _, shape in ipairs(body:getShapes()) do
 			shape:destroyShape()
 		end
 	end
+
+	self.network:sendToClients("cl_n_worldCleanedMsg", #bodies)
 end
 
 function World.server_spawnNewCharacter(self, params)
@@ -243,6 +250,11 @@ function World:sv_e_placeHvs(params)
 end
 
 --World versions
+
 ---@type WorldClass
 WorldVer2 = class(World)
 WorldVer2.terrainScript = "$CONTENT_DATA/Scripts/Terrain/Terrain_v2.lua"
+
+---@type WorldClass
+WorldVer3 = class(World)
+WorldVer3.terrainScript = "$CONTENT_DATA/Scripts/Terrain/Terrain_v3.lua"
