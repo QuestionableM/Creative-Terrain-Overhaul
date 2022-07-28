@@ -82,6 +82,10 @@ local function isInWaterHeight(height)
 	return (height < -15)
 end
 
+local function isInDesert(x, y)
+	return (_sm_noise_octaveNoise2d(x, y, 12, g_terrainSeed_371) > 0.3)
+end
+
 function GetHeightAt( x, y, lod )
 	return CalculateTerrainHeight(x, y)
 end
@@ -130,6 +134,10 @@ function GetColorAt( x, y, lod )
 		return 0.8, 0.8, 0.8
 	end
 
+	if isInDesert(x, y) then
+		return 0.7, 0.6, 0.6
+	end
+
 	local l_height = CalculateTerrainHeight(x, y)
 	if isInWaterHeight(l_height) then
 		local _noise = _sm_noise_octaveNoise2d(x, y, 6, g_terrainSeed) * 0.15
@@ -145,7 +153,7 @@ function GetColorAt( x, y, lod )
 end
 
 function GetMaterialAt( x, y, lod )
-	if isInFarLands(x, y) then
+	if isInFarLands(x, y) or isInDesert(x, y) then
 		return 0, 1, 0, 0, 0, 0, 0, 0
 	end
 
@@ -162,6 +170,7 @@ function GetMaterialAt( x, y, lod )
 end
 
 local ground_clutter = { -1, 9, 0, 15, 19, 14, 20, 22 }
+local desert_clutter_table = { 19, 15, 5 }
 local underwater_clutter =
 {
 	--id -> max_height
@@ -172,6 +181,7 @@ local underwater_clutter =
 }
 
 local ground_clutter_sz = #ground_clutter
+local desert_clutter_table_sz = #desert_clutter_table
 local underwater_clutter_sz = #underwater_clutter
 
 --36 37
@@ -180,6 +190,22 @@ function GetClutterIdxAt( x, y )
 	local d_y = y * 0.5
 
 	if isInFarLands(d_x, d_y) then
+		return -1
+	end
+
+	if isInDesert(d_x, d_y) then
+		local desert_clutter =
+			_sm_noise_octaveNoise2d(d_x, d_y, 5, g_terrainSeed_192) *
+			_sm_noise_octaveNoise2d(d_x * 0.5, d_y * 0.5, 1, g_terrainSeed_45)
+
+		if desert_clutter > 0.2 then
+			local desert_clutter_noise = _sm_noise_octaveNoise2d(d_x, d_y, 2, g_terrainSeed_712)
+			local desert_clutter_idx = math.floor(desert_clutter_noise * 11.832) % desert_clutter_table_sz
+			local desert_clutter_id = desert_clutter_table[desert_clutter_idx + 1]
+
+			return desert_clutter_id
+		end
+
 		return -1
 	end
 
