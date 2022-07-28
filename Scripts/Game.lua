@@ -12,7 +12,7 @@ Game.enableAmmoConsumption = false
 Game.enableRestrictions = true
 Game.enableUpgrade = true
 
-CREATIVE_TERRAIN_OVERHAUL_VERSION = 2
+CREATIVE_TERRAIN_OVERHAUL_VERSION = 3
 
 function Game.server_onCreate( self )
 	print("Game.server_onCreate")
@@ -23,12 +23,12 @@ function Game.server_onCreate( self )
 		self.sv.saved = {}
 
 		self.sv.saved.seed = math.random(os.time())
-		self.sv.saved.world = sm.world.createWorld( "$CONTENT_DATA/Scripts/World.lua", "WorldVer2", {}, self.sv.saved.seed )
+		self.sv.saved.world = sm.world.createWorld( "$CONTENT_DATA/Scripts/World.lua", "WorldVer3", {}, self.sv.saved.seed )
 
 		self.sv.saved.time = 0.2
 		self.sv.saved.time_progress = true
 
-		self.sv.saved.version = 2
+		self.sv.saved.version = 3
 
 		self.storage:save( self.sv.saved )
 	end
@@ -380,7 +380,8 @@ end
 local available_world_classes =
 {
 	[1] = "World",
-	[2] = "WorldVer2"
+	[2] = "WorldVer2",
+	[3] = "WorldVer3"
 }
 
 function Game:sv_n_regenerateWorld(data)
