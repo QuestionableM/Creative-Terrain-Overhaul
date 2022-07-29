@@ -132,6 +132,34 @@ local function gc_get_world_seed(self, params)
 	self.network:sendToServer("sv_n_getTerrainSeed")
 end
 
+local function gc_import_creation(self, params)
+	local valid, result = sm.localPlayer.getRaycast(100)
+	if valid then
+		local pl_char = sm.localPlayer.getPlayer():getCharacter()
+		if pl_char and sm.exists(pl_char) then
+			local import_params = {
+				[1] = pl_char:getWorld(),
+				[2] = params[1],
+				[3] = result.pointWorld
+			}
+
+			self.network:sendToServer("sv_n_importCreation", import_params)
+		end
+	end
+end
+
+local function gc_export_creation(self, params)
+	local valid, result = sm.localPlayer.getRaycast(100)
+	if valid and result.type == "body" then
+		local export_params = {
+			[1] = params[1],
+			[2] = result:getBody()
+		}
+
+		self.network:sendToServer("sv_n_exportCreation", export_params)
+	end
+end
+
 local gc_command_list =
 {
 	["/clear"] = {
@@ -175,6 +203,19 @@ local gc_command_list =
 	["/seed"] = {
 		desc = "Gets the seed of and the version of the current terrain generation.",
 		func = gc_get_world_seed
+	},
+
+	["/import"] = {
+		desc = "Imports a creation from survival files and custom game files.",
+		func = gc_import_creation,
+		args = { { "string", "creation_name", false } },
+		host_only = true
+	},
+	["/export"] = {
+		desc = "Exports the creation you're currently looking at.",
+		func = gc_export_creation,
+		args = { { "string", "creation_name", false } },
+		host_only = true
 	},
 
 	--Vanilla Commands

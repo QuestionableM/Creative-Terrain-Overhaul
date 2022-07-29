@@ -481,6 +481,54 @@ function Game:sv_n_getTerrainSeed(data, caller)
 	self.network:sendToClient(caller, "cl_n_displaySeedData", terrain_data)
 end
 
+local function fileExistsSafe(path)
+	local success, output = pcall(sm.json.fileExists, path)
+	if success then
+		return output
+	end
+
+	return false
+end
+
+function Game:cl_n_spawnCreationError(creation_name)
+	cf_errorChatMessage("Couldn't find the specified creation: #ffff00"..creation_name.."#ffffff")
+end
+
+local content_local_bp = "$CONTENT_DATA/LocalBlueprints/"
+local survival_local_bp = "$SURVIVAL_DATA/LocalBlueprints/"
+
+function Game:sv_n_importCreation(data, caller)
+	local world = data[1]
+	local creation_name = data[2]
+	local creation_pos = data[3]
+
+	local final_path = nil
+	local content_path = content_local_bp..creation_name..".blueprint"
+	if fileExistsSafe(content_path) then
+		final_path = content_path
+	else
+		local survival_path = survival_local_bp..creation_name..".blueprint"
+		if fileExistsSafe(survival_path) then
+			final_path = survival_path
+		end
+	end
+
+	if final_path == nil then
+		self.network:sendToClient(caller, "cl_n_spawnCreationError", creation_name)
+		return
+	end
+
+	sm.creation.importFromFile(world, final_path, creation_pos)
+end
+
+function Game:sv_n_exportCreation(data, caller)
+	local out_name = data[1]
+	local body = data[2]
+
+	local obj = sm.json.parseJsonString(sm.creation.exportToString(body))
+	sm.json.save(obj, content_local_bp..out_name..".blueprint")
+end
+
 --Confirm Dialog Callbacks
 function Game:cl_diag_onButtonCallback(button)
 	if button == "Yes" then
