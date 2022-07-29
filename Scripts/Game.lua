@@ -521,12 +521,18 @@ function Game:sv_n_importCreation(data, caller)
 	sm.creation.importFromFile(world, final_path, creation_pos)
 end
 
+function Game:cl_n_onExportCreationMsg(name)
+	sm.gui.chatMessage("Creation exported as: #ffff00"..content_local_bp..name..".blueprint#ffffff")
+end
+
 function Game:sv_n_exportCreation(data, caller)
 	local out_name = data[1]
 	local body = data[2]
 
 	local obj = sm.json.parseJsonString(sm.creation.exportToString(body))
 	sm.json.save(obj, content_local_bp..out_name..".blueprint")
+
+	self.network:sendToClient(caller, "cl_n_onExportCreationMsg", out_name)
 end
 
 --Confirm Dialog Callbacks

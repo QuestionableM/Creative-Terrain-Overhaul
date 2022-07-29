@@ -145,6 +145,8 @@ local function gc_import_creation(self, params)
 
 			self.network:sendToServer("sv_n_importCreation", import_params)
 		end
+	else
+		sm.gui.chatMessage("#ffff00Hint#ffffff: Aim at the ground. (raycast radius: #ffff00100#ffffff meters).")
 	end
 end
 
@@ -157,6 +159,8 @@ local function gc_export_creation(self, params)
 		}
 
 		self.network:sendToServer("sv_n_exportCreation", export_params)
+	else
+		sm.gui.chatMessage("#ffff00Hint#ffffff: Aim on a creation to export it!")
 	end
 end
 
