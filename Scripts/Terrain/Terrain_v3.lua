@@ -381,13 +381,12 @@ function GetAssetsForCell( cellX, cellY, lod )
 					end
 				end
 			else
+				local asset_noise = AssetNoise(g_x, g_y)
 				if isInWaterHeight(asset_height) then
-					local asset_noise = AssetNoise(g_x, g_y)
-					if asset_noise > 0.4 then
+					if asset_noise > 0.25 then
 						AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, ground_rock_list, ground_rock_list_sz)
 					end
 				else
-					local asset_noise = AssetNoise(g_x, g_y)
 					if asset_noise > 0.3 then
 						AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, ground_asset_list, ground_asset_list_sz)
 					end
