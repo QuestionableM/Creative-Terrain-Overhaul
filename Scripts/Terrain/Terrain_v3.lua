@@ -53,6 +53,7 @@ local _util_clamp = sm.util.clamp
 local _sm_noise_octaveNoise2d = sm.noise.octaveNoise2d
 local _math_abs = math.abs
 local _math_min = math.min
+local _math_floor = math.floor
 
 --Height: terrain_height + mountain_height - water_noise
 local function CalculateTerrainHeight(x, y)
@@ -160,7 +161,7 @@ function GetMaterialAt( x, y, lod )
 	local mat_height = CalculateTerrainHeight(x, y)
 	if isInDesert(x, y) then
 		if isTooSteep(x, y, mat_height) then
-			return 0, 0.8, 0, 0, 0, 0.4, 0
+			return 0, 0.8, 0, 0, 0, 0.4, 0, 0
 		end
 
 		return 0, 1, 0, 0, 0, 0, 0, 0
@@ -208,7 +209,7 @@ function GetClutterIdxAt( x, y )
 
 	if isInWaterHeight(clutter_height) then
 		local underwater_clutter_noise = _sm_noise_octaveNoise2d(x * 2.832, y * 2.832, 11, g_terrainSeed)
-		local clutter_idx = math.floor(underwater_clutter_noise * 23.129) % underwater_clutter_sz
+		local clutter_idx = _math_floor(underwater_clutter_noise * 23.129) % underwater_clutter_sz
 		local cur_clutter_data = underwater_clutter[clutter_idx + 1]
 
 		--Compare max height with current height
@@ -226,7 +227,7 @@ function GetClutterIdxAt( x, y )
 
 		if desert_clutter > 0.2 then
 			local desert_clutter_noise = _sm_noise_octaveNoise2d(d_x, d_y, 2, g_terrainSeed_712)
-			local desert_clutter_idx = math.floor(desert_clutter_noise * 11.832) % desert_clutter_table_sz
+			local desert_clutter_idx = _math_floor(desert_clutter_noise * 11.832) % desert_clutter_table_sz
 			local desert_clutter_id = desert_clutter_table[desert_clutter_idx + 1]
 
 			return desert_clutter_id
@@ -236,7 +237,7 @@ function GetClutterIdxAt( x, y )
 	end
 
 	local clutter_noise = _sm_noise_octaveNoise2d(x, y, 12, g_terrainSeed_59) * _sm_noise_octaveNoise2d(x, y, 11, g_terrainSeed_4)
-	local clutter_idx = math.floor(clutter_noise * 42.234) % ground_clutter_sz
+	local clutter_idx = _math_floor(clutter_noise * 42.234) % ground_clutter_sz
 
 	return ground_clutter[clutter_idx + 1]
 end
@@ -278,9 +279,22 @@ local desert_vegetation_list =
 	{ sm.uuid.new("c63b9bff-0c25-460b-a1a3-af3161592170"), { 0x3f5900ff, 0x576828ff, 0x66552cff }, 3, { leaves = 0 } }  --env_nature_foliage_boxwood
 }
 
-local ground_asset_list_sz = #ground_asset_list
-local ground_rock_list_sz = #ground_rock_list
+local desert_rock_list =
+{
+	{ sm.uuid.new("18d95c10-63a3-40a5-8edc-dc062d547b70"), {}, 0, { rock = 0x82430eff } },
+	{ sm.uuid.new("194e7c7f-26de-48a1-b8ee-775e68100ed1"), {}, 0, { rock = 0x82430eff } },
+	{ sm.uuid.new("1454cc81-b071-48f2-bf50-8a0d8b93e393"), {}, 0, { rock = 0x82430eff } },
+	{ sm.uuid.new("a5d325bd-2af7-4222-be6d-d6b1018e6918"), {}, 0, { rock = 0x82430eff } },
+	{ sm.uuid.new("388fdf39-b223-4649-aceb-eb609aee87ef"), {}, 0, { rock = 0x82430eff } },
+	{ sm.uuid.new("2161d53a-1166-400f-a692-7055865d9fb9"), {}, 0, { rock = 0x82430eff } },
+	{ sm.uuid.new("dabe4e2b-f8f6-49df-8f20-6e31999c887d"), {}, 0, { rock = 0x82430eff } },
+	{ sm.uuid.new("84b1af25-76ce-48a5-8049-2f042e76985f"), {}, 0, { rock = 0x82430eff } }
+}
+
+local ground_asset_list_sz      = #ground_asset_list
+local ground_rock_list_sz       = #ground_rock_list
 local desert_vegetation_list_sz = #desert_vegetation_list
+local desert_rock_list_sz       = #desert_rock_list
 
 function AssetNoise(x, y)
 	return _sm_noise_octaveNoise2d(x * 0.854, y * 0.854, 1, g_terrainSeed_92) *
@@ -305,7 +319,7 @@ end
 local _asset_scale = sm.vec3.new(0.25, 0.25, 0.25)
 function AddRandomAsset(table, x, y, z, x_local, y_local, ass_list, ass_list_sz)
 	local hvs_data_noise = _sm_noise_octaveNoise2d(x * 3, y * 3, 1, g_terrainSeed_192)
-	local hvs_data_idx = math.floor(hvs_data_noise * 42.83291) % ass_list_sz
+	local hvs_data_idx = _math_floor(hvs_data_noise * 42.83291) % ass_list_sz
 	local cur_hvs_data = ass_list[hvs_data_idx + 1]
 
 	local asset_col_table = cur_hvs_data[2]
@@ -316,7 +330,7 @@ function AddRandomAsset(table, x, y, z, x_local, y_local, ass_list, ass_list_sz)
 	for k, v in pairs(cur_hvs_data[4]) do
 		if v == 0 then
 			local color_noise = _sm_noise_octaveNoise2d(x * 2.12, y * 2.12, 1, g_terrainSeed + color_idx)
-			local color_array_idx = math.floor(color_noise * 92.2832) % asset_col_table_sz
+			local color_array_idx = _math_floor(color_noise * 92.2832) % asset_col_table_sz
 
 			color_data[k] = sm.color.new(asset_col_table[color_array_idx + 1])
 		else
@@ -360,7 +374,9 @@ function GetAssetsForCell( cellX, cellY, lod )
 			if isInDesert(g_x, g_y) then
 				if not isInWaterHeight(asset_height) then
 					local asset_noise = AssetNoise(g_x, g_y)
-					if asset_noise > 0.125 then
+					if asset_noise > 0.05 and asset_noise < 0.095 then
+						AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, desert_rock_list, desert_rock_list_sz)
+					elseif asset_noise > 0.125 then
 						AddRandomAsset(cell_assets, g_x, g_y, asset_height, x_local, y_local, desert_vegetation_list, desert_vegetation_list_sz)
 					end
 				end
@@ -443,13 +459,13 @@ local hvs_rock_table_sz = #hvs_rock_table
 local function AddHarvestable(table, x, y, z, x_local, y_local, hvs_table, hvs_table_sz)
 	--Pick a random harvestable uuid
 	local hvs_noise = _sm_noise_octaveNoise2d(x, y, 4, g_terrainSeed_45)
-	local hvs_index = math.floor(hvs_noise * 23) % hvs_table_sz
+	local hvs_index = _math_floor(hvs_noise * 23) % hvs_table_sz
 	local cur_hvs_data = hvs_table[hvs_index + 1]
 
 	--Pick a random color for harvestable
 	local hvs_color_noise = _sm_noise_octaveNoise2d(x, y, 1, g_terrainSeed_12)
 	local hvs_color_noise_2 = _math_abs(_sm_noise_octaveNoise2d(x * 0.5, y * 0.5, 3, g_terrainSeed_981)) * 100
-	local hvs_color_idx = math.floor(hvs_color_noise * hvs_color_noise_2) % cur_hvs_data[3]
+	local hvs_color_idx = _math_floor(hvs_color_noise * hvs_color_noise_2) % cur_hvs_data[3]
 	local hvs_color = sm.color.new(cur_hvs_data[2][hvs_color_idx + 1])
 
 	--Create a random harvestable rotation
