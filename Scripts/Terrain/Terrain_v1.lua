@@ -78,10 +78,6 @@ local function CalculateTerrainHeight(x, y)
 	return _util_clamp(height_final - water_noise - 450, -480, 1000)
 end
 
-local function isInWater(x, y)
-	return (CalculateTerrainHeight(x, y) < -465)
-end
-
 local function isInWaterHeight(height)
 	return (height < -465)
 end
@@ -98,35 +94,27 @@ end
 local _sm_vec3_cross = sm.vec3.cross
 local _sm_vec3_normalize = sm.vec3.normalize
 local _sm_vec3_new = sm.vec3.new
-local _sm_vec3_dot = sm.vec3.dot
-local function NormalFrom3Points(a_vec, b_vec, c_vec)
-	local dir = _sm_vec3_cross(b_vec - a_vec, c_vec - a_vec)
-	return _sm_vec3_normalize(dir)
-end
-
 local function HeightAndPosToNormal(global_x, global_y, height)
 	local point_1 = _sm_vec3_new(global_x, global_y, height)
 
+	local pt2_x025 = global_x + 0.25
+
 	--Point 2
-	local pt2_x = global_x + 0.25
 	local pt2_y = global_y + 0.25
-	local pt2_height = CalculateTerrainHeight(pt2_x, pt2_y)
-	local point_2 = _sm_vec3_new(pt2_x, pt2_y, pt2_height)
+	local pt2_height = CalculateTerrainHeight(pt2_x025, pt2_y)
+	local point_2 = _sm_vec3_new(pt2_x025, pt2_y, pt2_height)
 
 	--Point 3
-	local pt3_x = global_x + 0.25
-	local pt3_height = CalculateTerrainHeight(pt3_x, global_y)
-	local point_3 = _sm_vec3_new(pt3_x, global_y, pt3_height)
+	local pt3_height = CalculateTerrainHeight(pt2_x025, global_y)
+	local point_3 = _sm_vec3_new(pt2_x025, global_y, pt3_height)
 
-	return NormalFrom3Points(point_1, point_2, point_3)
+	return _sm_vec3_normalize(_sm_vec3_cross(point_2 - point_1, point_3 - point_1))
 end
 
+local _sm_vec3_dot = sm.vec3.dot
 local _up_direction = _sm_vec3_new(0, 0, 1)
 local function isTooSteep(x, y, height)
-	local ground_normal = HeightAndPosToNormal(x, y, height)
-	local normal_dot = _sm_vec3_dot(ground_normal, _up_direction)
-
-	return (normal_dot > -0.8)
+	return (_sm_vec3_dot(HeightAndPosToNormal(x, y, height), _up_direction) > -0.8)
 end
 
 function GetColorAt( x, y, lod )

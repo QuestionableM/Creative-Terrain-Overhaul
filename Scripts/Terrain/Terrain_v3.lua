@@ -121,24 +121,23 @@ end
 local _sm_vec3_dot = sm.vec3.dot
 local _up_direction = _sm_vec3_new(0, 0, 1)
 local function isTooSteep(x, y, height)
-	local ground_normal = HeightAndPosToNormal(x, y, height)
-	return (_sm_vec3_dot(ground_normal, _up_direction) > -0.8)
+	return (_sm_vec3_dot(HeightAndPosToNormal(x, y, height), _up_direction) > -0.8)
 end
 
 function GetColorAt( x, y, lod )
 	if isInFarLands(x, y) then
 		return 0.8, 0.8, 0.8
 	end
-	
-	local l_height = CalculateTerrainHeight(x, y)
+
 	if isInDesert(x, y) then
-		local _noise = _sm_noise_octaveNoise2d(x, y, 6, g_terrainSeed_12) * 0.1
-		return 0.7 + _noise, 0.6 + _noise, 0.6 + _noise
+		local desert_noise = _sm_noise_octaveNoise2d(x, y, 6, g_terrainSeed_12) * 0.1
+		return 0.7 + desert_noise, 0.6 + desert_noise, 0.6 + desert_noise
 	end
 
+	local l_height = CalculateTerrainHeight(x, y)
 	if isInWaterHeight(l_height) then
-		local _noise = _sm_noise_octaveNoise2d(x, y, 6, g_terrainSeed) * 0.15
-		return 0.71 + _noise, 0.753 + _noise, 0.788 + _noise
+		local underwater_noise = _sm_noise_octaveNoise2d(x, y, 6, g_terrainSeed) * 0.15
+		return 0.71 + underwater_noise, 0.753 + underwater_noise, 0.788 + underwater_noise
 	end
 
 	if isTooSteep(x, y, l_height) then
