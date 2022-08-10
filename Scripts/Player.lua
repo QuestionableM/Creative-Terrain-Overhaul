@@ -8,11 +8,6 @@ dofile( "$GAME_DATA/Scripts/game/BasePlayer.lua" )
 ---@field cl table
 Player = class( BasePlayer )
 
---[[function Player:sv_e_onSpawnCharacter()
-	print("Player:sv_e_onSpawnCharacter")
-	sm.event.sendToGame("sv_e_onSpawnPlayerCharacter", self.player)
-end]]
-
 local StatsTickRate = 40
 local PerMinute = StatsTickRate / ( 40 * 60 )
 local HpRecovery = 50 * PerMinute
