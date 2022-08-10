@@ -1,7 +1,7 @@
 dofile( "$SURVIVAL_DATA/Scripts/util.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_constants.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/util/Timer.lua" )
-dofile( "$GAME_DATA/Scripts/game/BasePlayer.lua" )
+dofile( "$CONTENT_DATA/Scripts/BasePlayer.lua" )
 
 ---@class BTGPlayer : PlayerClass
 ---@field sv table
