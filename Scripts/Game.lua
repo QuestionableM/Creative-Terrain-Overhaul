@@ -4,7 +4,9 @@ dofile( "$SURVIVAL_DATA/Scripts/game/util/recipes.lua" )
 
 dofile("GameCommands.lua")
 
----@class GameClass
+---@class TerrainOverhaulGame : GameClass
+---@field sv table
+---@field tmp_confirmDiag GuiInterface
 Game = class( nil )
 Game.enableLimitedInventory = false
 Game.enableFuelConsumption = false
@@ -184,6 +186,11 @@ function Game:client_onCreate()
 
 	g_beaconManager:cl_onCreate()
 	g_unitManager:cl_onCreate()
+	
+	g_survivalHud = sm.gui.createSurvivalHudGui()
+	g_survivalHud:setVisible("FoodBar", false)
+	g_survivalHud:setVisible("WaterBar", false)
+	g_survivalHud:setVisible("BindingPanel", false)
 end
 
 local GAME_DAYCYCLE_TIME = 900.0
@@ -258,9 +265,21 @@ function Game:server_onPlayerJoined(player, isNewPlayer)
 	g_unitManager:sv_onPlayerJoined(player)
 end
 
-function Game.sv_createPlayerCharacter( self, world, x, y, player, params )
-	local params = { player = player, x = x, y = y }
-	sm.event.sendToWorld(world, "server_spawnNewCharacter", params)
+function Game:sv_createPlayerCharacter(world, x, y, player, params)
+	local param_table = { player = player, x = x, y = y }
+	sm.event.sendToWorld(world, "server_spawnNewCharacter", param_table)
+end
+
+function Game:sv_e_respawn(data)
+	local d_player = data.player
+	local d_spawnPoint = data.spawnPoint
+
+	local cur_world = self.sv.saved.world
+	if d_spawnPoint ~= nil then
+		sm.event.sendToWorld(cur_world, "server_respawnCharacter", { player = d_player, pos = d_spawnPoint })
+	else
+		sm.event.sendToWorld(cur_world, "server_spawnNewCharacter", { player = d_player, x = 0, y = 0 })
+	end
 end
 
 function Game:sv_e_onSpawnPlayerCharacter(player)
@@ -533,6 +552,18 @@ function Game:sv_n_exportCreation(data, caller)
 	sm.json.save(obj, content_local_bp..out_name..".blueprint")
 
 	self.network:sendToClient(caller, "cl_n_onExportCreationMsg", out_name)
+end
+
+function Game:sv_n_toggleCharHealth(data, caller)
+	sm.event.sendToPlayer(caller, "sv_e_enableHealth", data)
+end
+
+function Game:sv_n_killCharacter(data, caller)
+	sm.event.sendToPlayer(caller, "sv_e_receiveDamage", { damage = 99999 })
+end
+
+function Game:sv_n_setSpawnpoint(data, caller)
+	sm.event.sendToPlayer(caller, "sv_e_setSpawnpoint")
 end
 
 --Confirm Dialog Callbacks

@@ -114,7 +114,7 @@ function World:sv_n_clearWorld()
 	self.network:sendToClients("cl_n_worldCleanedMsg", #bodies)
 end
 
-function World.server_spawnNewCharacter(self, params)
+function World:server_spawnNewCharacter(params)
     local spawnRayBegin = sm.vec3.new( params.x, params.y, 1024 )
 	local spawnRayEnd = sm.vec3.new( params.x, params.y, -1024 )
 	local valid, result = sm.physics.spherecast( spawnRayBegin, spawnRayEnd, 0.3 )
@@ -127,6 +127,12 @@ function World.server_spawnNewCharacter(self, params)
 
 	local character = sm.character.createCharacter( params.player, self.world, pos )
 	params.player:setCharacter( character )
+end
+
+function World:server_respawnCharacter(params)
+	local p_player = params.player
+	local character = sm.character.createCharacter(p_player, self.world, params.pos)
+	p_player:setCharacter(character)
 end
 
 --Beacons

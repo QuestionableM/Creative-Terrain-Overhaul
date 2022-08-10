@@ -164,6 +164,18 @@ local function gc_export_creation(self, params)
 	end
 end
 
+local function gc_enable_character_health(self, params)
+	self.network:sendToServer("sv_n_toggleCharHealth", params[1])
+end
+
+local function gc_kill_own_character(self, params)
+	self.network:sendToServer("sv_n_killCharacter")
+end
+
+local function gc_set_spawnpoint(self, params)
+	self.network:sendToServer("sv_n_setSpawnpoint")
+end
+
 local gc_command_list =
 {
 	["/clear"] = {
@@ -220,6 +232,19 @@ local gc_command_list =
 		func = gc_export_creation,
 		args = { { "string", "creation_name", false } },
 		host_only = true
+	},
+	["/enablehealth"] = {
+		desc = "Enables health for your character.",
+		func = gc_enable_character_health,
+		args = { { "bool", "enable", true } }
+	},
+	["/die"] = {
+		desc = "Kills the character.",
+		func = gc_kill_own_character
+	},
+	["/spawnpoint"] = {
+		desc = "Sets the spawn point for your character",
+		func = gc_set_spawnpoint
 	},
 
 	--Vanilla Commands
