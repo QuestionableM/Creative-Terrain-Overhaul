@@ -251,7 +251,7 @@ function BasePlayer.server_onMelee( self, hitPos, attacker, damage, power, hitDi
 	end
 
 	print("'Player' took melee damage")
-	if type( attacker ) == "Unit" then
+	if type( attacker ) == "Unit" or type(attacker) == "Player" then
 		self:sv_takeDamage( damage, "impact" )
 	else
 		local playerCharacter = self.player.character
