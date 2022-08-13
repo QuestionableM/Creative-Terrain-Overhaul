@@ -196,7 +196,7 @@ function Player.server_onFixedUpdate( self, dt )
 
 	local character = self.player:getCharacter()
 	if character and self.sv.saved.isConscious then
-		if character:isDiving() then
+		if character:isDiving() and self.sv.saved.enableHealth then
 			self.sv.saved.stats.breath = math.max( self.sv.saved.stats.breath - BreathLostPerTick, 0 )
 			if self.sv.saved.stats.breath == 0 then
 				self.sv.drownTimer:tick()
