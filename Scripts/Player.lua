@@ -18,6 +18,10 @@ local RespawnFadeTimeout = 5.0
 local RespawnDelay = RespawnFadeDuration * 40
 local RespawnEndDelay = 1.0 * 40
 
+local BreathLostPerTick = ( 100 / 60 ) / 40
+local DrownDamage = 5
+local DrownDamageCooldown = 40
+
 function Player.server_onCreate( self )
 	self.sv = {}
 	self.sv.saved = self.storage:load()
@@ -31,24 +35,23 @@ function Player.server_onCreate( self )
 		self.storage:save( self.sv.saved )
 	else
 		if self.sv.saved.stats == nil then
-			self.sv.saved.stats = { hp = 100, maxhp = 100 }
+			self.sv.saved.stats = { hp = 100, maxhp = 100, breath = 100, maxbreath = 100 }
+		else
+			if self.sv.saved.stats.hp == nil then
+				self.sv.saved.stats.hp = 100
+				self.sv.saved.stats.maxhp = 100
+			end
+
+			if self.sv.saved.stats.breath == nil then
+				self.sv.saved.stats.breath = 100
+				self.sv.saved.stats.maxbreath = 100
+			end
 		end
 		
-		if self.sv.saved.isConscious == nil then
-			self.sv.saved.isConscious = true
-		end
-
-		if self.sv.saved.isNewPlayer == nil then
-			self.sv.saved.isNewPlayer = true
-		end
-
-		if self.sv.saved.inChemical == nil then
-			self.sv.saved.inChemical = false
-		end
-
-		if self.sv.saved.inOil == nil then
-			self.sv.saved.inOil = false
-		end
+		if self.sv.saved.isConscious == nil then self.sv.saved.isConscious = true end
+		if self.sv.saved.isNewPlayer == nil then self.sv.saved.isNewPlayer = true end
+		if self.sv.saved.inChemical == nil then self.sv.saved.inChemical = false end
+		if self.sv.saved.inOil == nil then self.sv.saved.inOil = false end
 
 		self.storage:save(self.sv.saved)
 	end
@@ -68,8 +71,13 @@ end
 
 function Player.sv_init( self )
 	BasePlayer.sv_init( self )
+
 	self.sv.statsTimer = Timer()
 	self.sv.statsTimer:start( StatsTickRate )
+
+	self.sv.drownTimer = Timer()
+	self.sv.drownTimer:stop()
+
 	self.sv.spawnparams = {}
 end
 
@@ -85,6 +93,10 @@ function Player.client_onCreate( self )
 		if g_survivalHud then
 			g_survivalHud:open()
 		end
+
+		g_svServerHost = sm.localPlayer.getPlayer()
+
+		self.cl.underwaterEffect = sm.effect.createEffect( "Mechanic - StatusUnderwater" )
 	end
 end
 
@@ -96,6 +108,23 @@ function Player.client_onClientDataUpdate( self, data )
 		if g_survivalHud then
 			g_survivalHud:setVisible( "HealthBar", data.enableHealth )
 			g_survivalHud:setSliderData( "Health", data.stats.maxhp * 10 + 1, data.stats.hp * 10 )
+			g_survivalHud:setSliderData( "Breath", data.stats.maxbreath * 10 + 1, data.stats.breath * 10 )
+		end
+
+		local pl_char = self.player.character
+		if pl_char then
+			local charParam = self.player:isMale() and 1 or 2
+			self.cl.underwaterEffect:setParameter("char", charParam)
+			
+			if data.stats.breath <= 15 and not self.cl.underwaterEffect:isPlaying() and data.isConscious then
+				self.cl.underwaterEffect:start()
+			elseif ( data.stats.breath > 15 or not data.isConscious ) and self.cl.underwaterEffect:isPlaying() then
+				self.cl.underwaterEffect:stop()
+			end
+		end
+
+		if data.stats.hp < self.cl.stats.hp and data.stats.breath == 0 then
+			sm.gui.displayAlertText( "#{DAMAGE_BREATH}", 1 )
 		end
 
 		self.cl.enableHealth = data.enableHealth
@@ -118,9 +147,13 @@ function Player.cl_localPlayerUpdate( self, dt )
 	BasePlayer.cl_localPlayerUpdate( self, dt )
 
 	local character = self.player:getCharacter()
-	if character and not self.cl.isConscious then
-		local keyBindingText =  sm.gui.getKeyBinding( "Use", true )
-		sm.gui.setInteractionText( "", keyBindingText, "#{INTERACTION_RESPAWN}" )
+	if character then
+		if not self.cl.isConscious then
+			local keyBindingText =  sm.gui.getKeyBinding( "Use", true )
+			sm.gui.setInteractionText( "", keyBindingText, "#{INTERACTION_RESPAWN}" )
+		end
+
+		self.cl.underwaterEffect:setPosition(character.worldPosition)
 	end
 end
 
@@ -163,14 +196,33 @@ function Player.server_onFixedUpdate( self, dt )
 
 	local character = self.player:getCharacter()
 	if character and self.sv.saved.isConscious then
-		self.sv.statsTimer:tick()
-		if self.sv.statsTimer:done() then
-			self.sv.statsTimer:start( StatsTickRate )
+		if character:isDiving() then
+			self.sv.saved.stats.breath = math.max( self.sv.saved.stats.breath - BreathLostPerTick, 0 )
+			if self.sv.saved.stats.breath == 0 then
+				self.sv.drownTimer:tick()
+				if self.sv.drownTimer:done() then
+					if self.sv.saved.isConscious then
+						print( "'SurvivalPlayer' is drowning!" )
+						self:sv_takeDamage( DrownDamage, "drown" )
+					end
+					self.sv.drownTimer:start( DrownDamageCooldown )
+				end
+			end
+		else
+			self.sv.saved.stats.breath = self.sv.saved.stats.maxbreath
+			self.sv.drownTimer:start( DrownDamageCooldown )
+		end
 
-			self.sv.saved.stats.hp = math.min( self.sv.saved.stats.hp + HpRecovery, self.sv.saved.stats.maxhp )
+		if g_enableCharacterHealing then
+			self.sv.statsTimer:tick()
+			if self.sv.statsTimer:done() then
+				self.sv.statsTimer:start( StatsTickRate )
 
-			self.storage:save( self.sv.saved )
-			self.network:setClientData( self.sv.saved )
+				self.sv.saved.stats.hp = math.min( self.sv.saved.stats.hp + HpRecovery, self.sv.saved.stats.maxhp )
+
+				self.storage:save( self.sv.saved )
+				self.network:setClientData( self.sv.saved )
+			end
 		end
 	end
 end

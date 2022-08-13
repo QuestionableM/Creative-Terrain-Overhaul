@@ -29,11 +29,18 @@ function Game.server_onCreate( self )
 
 		self.sv.saved.time = 0.2
 		self.sv.saved.time_progress = true
+		self.sv.saved.enable_healing = true
 
 		self.sv.saved.version = 3
 
-		self.storage:save( self.sv.saved )
+		self.storage:save(self.sv.saved)
+	else
+		if self.sv.saved.enable_healing == nil then self.sv.saved.enable_healing = true end
+
+		self.storage:save(self.sv.saved)
 	end
+
+	g_enableCharacterHealing = self.sv.saved.enable_healing
 
 	g_beaconManager = BeaconManager()
 	g_beaconManager:sv_onCreate()
@@ -442,7 +449,11 @@ local available_world_classes =
 	[3] = "WorldVer3"
 }
 
-function Game:sv_n_regenerateWorld(data)
+function Game:sv_n_regenerateWorld(data, caller)
+	if caller ~= g_svServerHost then
+		return
+	end
+
 	local generator_version = CREATIVE_TERRAIN_OVERHAUL_VERSION
 	local generator_seed = math.random(os.time())
 
@@ -517,6 +528,10 @@ local content_local_bp = "$CONTENT_DATA/LocalBlueprints/"
 local survival_local_bp = "$SURVIVAL_DATA/LocalBlueprints/"
 
 function Game:sv_n_importCreation(data, caller)
+	if caller ~= g_svServerHost then
+		return
+	end
+
 	local world = data[1]
 	local creation_name = data[2]
 	local creation_pos = data[3]
@@ -545,6 +560,10 @@ function Game:cl_n_onExportCreationMsg(name)
 end
 
 function Game:sv_n_exportCreation(data, caller)
+	if caller ~= g_svServerHost then
+		return
+	end
+
 	local out_name = data[1]
 	local body = data[2]
 
@@ -564,6 +583,44 @@ end
 
 function Game:sv_n_setSpawnpoint(data, caller)
 	sm.event.sendToPlayer(caller, "sv_e_setSpawnpoint")
+end
+
+function Game:sv_n_damageCharacter(damage_number, caller)
+	sm.event.sendToPlayer(caller, "sv_e_receiveDamage", { damage = damage_number })
+end
+
+function Game:cl_n_toggleHealingMsg(healing_enabled)
+	sm.gui.chatMessage("Healing: " .. (healing_enabled and "On" or "Off"))
+end
+
+---@param enable_healing nil|boolean
+---@param caller Player
+function Game:sv_n_toggleHealing(enable_healing, caller)
+	if caller ~= g_svServerHost then
+		return
+	end
+
+	if enable_healing == nil then
+		self.sv.saved.enable_healing = not self.sv.saved.enable_healing
+	else
+		self.sv.saved.enable_healing = enable_healing
+	end
+
+	g_enableCharacterHealing = self.sv.saved.enable_healing
+
+	self.storage:save(self.sv.saved)
+	self.network:sendToClients("cl_n_toggleHealingMsg", g_enableCharacterHealing)
+end
+
+---@param data table
+---@param caller Player
+function Game:sv_n_ragdollCharacter(data, caller)
+	local pl_char = caller:getCharacter()
+	if pl_char and sm.exists(pl_char) then
+		if not pl_char:isTumbling() then
+			pl_char:setTumbling(true)
+		end
+	end
 end
 
 --Confirm Dialog Callbacks

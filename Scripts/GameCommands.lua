@@ -176,6 +176,18 @@ local function gc_set_spawnpoint(self, params)
 	self.network:sendToServer("sv_n_setSpawnpoint")
 end
 
+local function gc_damage_character(self, params)
+	self.network:sendToServer("sv_n_damageCharacter", params[1])
+end
+
+local function gc_enable_healing(self, params)
+	self.network:sendToServer("sv_n_toggleHealing", params[1])
+end
+
+local function gc_ragdoll_character(self, params)
+	self.network:sendToServer("sv_n_ragdollCharacter")
+end
+
 local gc_command_list =
 {
 	["/clear"] = {
@@ -245,6 +257,21 @@ local gc_command_list =
 	["/spawnpoint"] = {
 		desc = "Sets the spawn point for your character",
 		func = gc_set_spawnpoint
+	},
+	["/damage"] = {
+		desc = "Damages the player",
+		args = { { "int", "damage", false } },
+		func = gc_damage_character
+	},
+	["/enablehealing"] = {
+		desc = "Toggles healing for all the players. (Host only)",
+		args = { { "bool", "enable", true } },
+		func = gc_enable_healing,
+		host_only = true
+	},
+	["/ragdoll"] = {
+		desc = "Puts your character in ragdoll state.",
+		func = gc_ragdoll_character
 	},
 
 	--Vanilla Commands

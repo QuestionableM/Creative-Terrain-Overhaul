@@ -368,7 +368,8 @@ function BasePlayer.server_onCollision( self, other, collisionPosition, selfPoin
 		print("'Player' took", damage, "collision damage")
 		self:sv_takeDamage( damage, "shock" )
 	end
-	if g_enableCollisionTumble then
+
+	if self.sv.saved and self.sv.saved.enableHealth then
 		if tumbleTicks > 0 then
 			if self:sv_startTumble( tumbleTicks ) then
 				-- Limit tumble velocity
