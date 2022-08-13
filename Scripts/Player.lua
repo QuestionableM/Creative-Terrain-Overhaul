@@ -27,7 +27,7 @@ function Player.server_onCreate( self )
 	self.sv.saved = self.storage:load()
 	if self.sv.saved == nil then
 		self.sv.saved = {}
-		self.sv.saved.stats = { hp = 100, maxhp = 100 }
+		self.sv.saved.stats = { hp = 100, maxhp = 100, breath = 100, maxbreath = 100 }
 		self.sv.saved.isConscious = true
 		self.sv.saved.isNewPlayer = true
 		self.sv.saved.inChemical = false
