@@ -1,30 +1,46 @@
 dofile( "$SURVIVAL_DATA/Scripts/util.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_constants.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/survival_items.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/util/Timer.lua" )
-dofile( "$SURVIVAL_DATA/Scripts/game/survival_camera.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/QuestManager.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/camera_util.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/SurvivalPlayer.lua" )
 
+---@class BasePlayer : PlayerClass
+---@field sv table
+---@field cl table
 BasePlayer = class( nil )
 
 local FireDamage = 10
 local FireDamageCooldown = 40
 local PoisonDamage = 10
 local PoisonDamageCooldown = 40
+local RadiationDamage = 1
+local RadiationDamageCooldown = 20
 
-local StopTumbleTimerTickThreshold = 1.0 * 40 -- Time to keep tumble active after speed is below threshold
-local MaxTumbleTimerTickThreshold = 20.0 * 40 -- Maximum time to keep tumble active before timing out
+local VelocityBufferCount = 8
+
+-- Tumble recovery
+local StopTumbleSpeedThreshold = 2.5 -- Tumble will start to recover at or below this speed threshold
+local StopTumbleTimerTickThreshold = 40 -- Time to recover from tumble while the speed is below the threshold, acts as default tumble
+local StopTumbleSuspendedTickThreshold = 3.0 * 40 -- Tumble will recover while not touching anything, after this amount of time
+-- Tumble resist
+local MaxTumbleTimerTickThreshold = 8.0 * 40 -- Maximum time to keep tumble active before forcing recovery
 local TumbleResistTickTime = 3.0 * 40 -- Time that the player will resist tumbling after timing out
-local MaxTumbleImpulseSpeed = 35
-local RecentTumblesTickTimeInterval = 30.0 * 40 -- Time frame to count amount of tumbles in a row
-local MaxRecentTumbles = 3
+local MaxRecentTumbles = 10 -- Ignore tumbles when this amount of tumbles already happened recently
+local RecentTumblesTickTimeInterval = 30.0 * 40 -- Time frame to count amount of tumbles that has happened recently
 
-local CameraState =
-{
-	DEFAULT = 1,
-	TUMBLING = 2,
-	INTERACTABLE = 3,
-	CUTSCENE = 4,
-	CUSTOM = 5
+local MaxTumbleImpulseSpeed = 35 -- Max allowed tumble speed inherited from a collision
+
+local ProjectileToEdibleShape = {
+	[tostring(projectile_banana)] = ITEMS.obj_plantables_banana,
+	[tostring(projectile_blueberry)] = ITEMS.obj_plantables_blueberry,
+	[tostring(projectile_orange)] = ITEMS.obj_plantables_orange,
+	[tostring(projectile_pineapple)] = ITEMS.obj_plantables_pineapple,
+	[tostring(projectile_carrot)] = ITEMS.obj_plantables_carrot,
+	[tostring(projectile_redbeet)] = ITEMS.obj_plantables_redbeet,
+	[tostring(projectile_tomato)] = ITEMS.obj_plantables_tomato,
+	[tostring(projectile_broccoli)] = ITEMS.obj_plantables_broccoli,
 }
 
 function BasePlayer.server_onCreate( self )
@@ -46,6 +62,10 @@ function BasePlayer.server_onRefresh( self )
 end
 
 function BasePlayer.sv_init( self )
+	if self.player.publicData == nil then
+		self.player.publicData = {}
+	end
+
 	self.sv.damageCooldown = Timer()
 	self.sv.damageCooldown:start( 3.0 * 40 )
 
@@ -58,8 +78,17 @@ function BasePlayer.sv_init( self )
 	self.sv.poisonDamageCooldown = Timer()
 	self.sv.poisonDamageCooldown:start()
 
+	self.sv.radiationDamageCooldown = Timer()
+	self.sv.radiationDamageCooldown:start()
+
 	self.sv.tumbleReset = Timer()
 	self.sv.tumbleReset:start( StopTumbleTimerTickThreshold )
+
+	self.sv.collisionTumbleImmunity = Timer()
+	self.sv.collisionTumbleImmunity:start()
+
+	self.sv.tumbleSuspendedReset = Timer()
+	self.sv.tumbleSuspendedReset:start( StopTumbleSuspendedTickThreshold )
 
 	self.sv.maxTumbleTimer = Timer()
 	self.sv.maxTumbleTimer:start( MaxTumbleTimerTickThreshold )
@@ -67,6 +96,9 @@ function BasePlayer.sv_init( self )
 	self.sv.resistTumbleTimer = Timer()
 	self.sv.resistTumbleTimer:start( TumbleResistTickTime )
 	self.sv.resistTumbleTimer.count = TumbleResistTickTime
+
+	self.sv.velocityBuffer = {}
+	self.sv.velocityBufferIndex = 1
 
 	self.sv.recentTumbles = {}
 end
@@ -113,10 +145,14 @@ function BasePlayer.cl_n_onEvent( self, data )
 		playSingleHurtSound( "Mechanic - Hurtshock", data.pos, data.damage )
 	elseif data.event == "impact" then
 		playSingleHurtSound( "Mechanic - Hurt", data.pos, data.damage )
+	elseif data.event == "scannerbot" then
+		playSingleHurtSound( "Mechanic - Hurt", data.pos, data.damage )
 	elseif data.event == "fire" then
 		playSingleHurtSound( "Mechanic - HurtFire", data.pos, data.damage )
 	elseif data.event == "poison" then
 		playSingleHurtSound( "Mechanic - Hurtpoision", data.pos, data.damage )
+	elseif data.event == "radiation" then
+		playSingleHurtSound( "Mechanic - HurtRadiation", data.pos, data.damage )
 	end
 end
 
@@ -141,9 +177,10 @@ function BasePlayer.cl_localPlayerUpdate( self, dt )
 	local wantedCameraData = {
 		hideGui = false,
 		cameraState = sm.camera.state.default,
-		lockedControls = false }
+		lockedControls = false
+	}
 
-	if self.player.clientPublicData.cutsceneCameraData then
+	if self.player.clientPublicData.cutsceneCameraData and self.player.clientPublicData.cutsceneCameraData.distance < MAX_CINEMATIC_DISTANCE then
 		wantedCameraState = CameraState.CUTSCENE
 		wantedCameraData = self.player.clientPublicData.cutsceneCameraData
 		alwaysUpdate = true
@@ -151,39 +188,23 @@ function BasePlayer.cl_localPlayerUpdate( self, dt )
 		wantedCameraState = CameraState.INTERACTABLE
 		wantedCameraData = self.player.clientPublicData.interactableCameraData
 		alwaysUpdate = true
-	elseif character and character:isTumbling() then
-		wantedCameraState = CameraState.TUMBLING
-		wantedCameraData.cameraState = sm.camera.state.forcedTP
 	elseif self.player.clientPublicData.customCameraData then
 		wantedCameraState = CameraState.CUSTOM
 		wantedCameraData = self.player.clientPublicData.customCameraData
 		alwaysUpdate = true
 		self.player.clientPublicData.customCameraData = nil
+	elseif self.player.clientPublicData.seatLockedCameraData then
+		wantedCameraState = CameraState.SEAT_LOCKED_CAMERA
+		wantedCameraData = self.player.clientPublicData.seatLockedCameraData
+		alwaysUpdate = true
+	elseif character and character:isTumbling() then
+		wantedCameraState = CameraState.TUMBLING
+		wantedCameraData.cameraState = sm.camera.state.forcedTP
 	end
 
 	if self.cl.cameraState ~= wantedCameraState or alwaysUpdate then
 		self.cl.cameraState = wantedCameraState
-		if wantedCameraData.hideGui ~= nil then
-			sm.gui.hideGui( wantedCameraData.hideGui )
-		end
-		if wantedCameraData.cameraState then
-			sm.camera.setCameraState( wantedCameraData.cameraState )
-		end
-		if wantedCameraData.cameraPosition then
-			sm.camera.setPosition( wantedCameraData.cameraPosition )
-		end
-		if wantedCameraData.cameraRotation then
-			sm.camera.setRotation( wantedCameraData.cameraRotation )
-		end
-		if wantedCameraData.cameraDirection then
-			sm.camera.setDirection( wantedCameraData.cameraDirection )
-		end
-		if wantedCameraData.cameraFov then
-			sm.camera.setFov( wantedCameraData.cameraFov )
-		end
-		if wantedCameraData.lockedControls ~= nil then
-			sm.localPlayer.setLockedControls( wantedCameraData.lockedControls )
-		end
+		SetWantedCameraData( wantedCameraData )
 	end
 
 	if character and character:isSwimming() and not self.cl.inChemical and not self.cl.inOil then
@@ -191,32 +212,57 @@ function BasePlayer.cl_localPlayerUpdate( self, dt )
 	end
 end
 
-function BasePlayer.client_onInteract( self, character, state ) end
+function BasePlayer.client_onInteract( self, character, state )
+end
 
 function BasePlayer.server_onFixedUpdate( self, dt )
 	local character = self.player:getCharacter()
 	if character then
 		self:sv_updateTumbling()
+
+		self.sv.velocityBufferIndex = self.sv.velocityBufferIndex + 1
+		if self.sv.velocityBufferIndex > VelocityBufferCount then
+			self.sv.velocityBufferIndex = 1
+		end
+		self.sv.velocityBuffer[self.sv.velocityBufferIndex] = character:getVelocity()
 	end
 
 	self.sv.damageCooldown:tick()
 	self.sv.impactCooldown:tick()
 	self.sv.fireDamageCooldown:tick()
 	self.sv.poisonDamageCooldown:tick()
+	self.sv.collisionTumbleImmunity:tick()
+	self.sv.radiationDamageCooldown:tick()
 end
 
-local allowed_attackers =
-{
-	["Unit"]   = true,
-	["Shape"]  = true,
-	["Player"] = true
-}
+function BasePlayer.client_onFixedUpdate( self, dt )
+	local character = self.player:getCharacter()
+	if character then
+		self:cl_updateTumbling()
+	end
+end
+
+function BasePlayer.cl_updateTumbling( self )
+	if self.player.character:isTumbling() then
+		-- Remember the tumbling velocity
+		self.cl.lastTumblingVelocity = self.player.character:getTumblingLinearVelocity()
+	elseif self.cl.lastTumblingVelocity then
+		-- Apply the tumbling velocity to the recovered character
+		local tumbleDirection = self.cl.lastTumblingVelocity:safeNormalize( sm.vec3.new( 0, 0, 1 ) )
+		local tumbleImpulse = self.cl.lastTumblingVelocity:length() * self.player.character.mass
+		sm.physics.applyImpulse( self.player.character, tumbleDirection * tumbleImpulse )
+		self.cl.lastTumblingVelocity = nil
+	end
+end
 
 function BasePlayer.server_onProjectile( self, hitPos, hitTime, hitVelocity, _, attacker, damage, userData, hitNormal, projectileUuid )
-	if allowed_attackers[type(attacker)] == true then
-		self:sv_takeDamage( damage, "shock" )
+	if type( attacker ) == "Unit" or ( type( attacker ) == "Shape" and isTrapProjectile( projectileUuid ) ) or ( userData and userData.damagePlayer ) then
+		local source = "shock"
+		if projectileUuid == projectile_tape or projectileUuid == projectile_bubblewrap then
+			source = "tapebotprojectile"
+		end
+		self:sv_takeDamage( damage, source, projectileUuid )
 	end
-
 	if self.player.character:isTumbling() then
 		ApplyKnockback( self.player.character, hitVelocity:normalize(), 2000 )
 	end
@@ -224,11 +270,23 @@ function BasePlayer.server_onProjectile( self, hitPos, hitTime, hitVelocity, _, 
 	if projectileUuid == projectile_water  then
 		self.network:sendToClient( self.player, "cl_n_fillWater" )
 	end
+
+	if isGoopProjectile( projectileUuid ) then
+		sm.event.sendToCharacter( self.player.character, "sv_e_addStatusEffect", { status = "goop", strength = 1 } )
+	end
+
+	local edibleShape = ProjectileToEdibleShape[tostring( projectileUuid )]
+	if edibleShape then
+		local edible = sm.item.getEdible( edibleShape )
+		if edible then
+			self:sv_e_eat( edible )
+		end
+	end
 end
 
 function BasePlayer.cl_n_fillWater( self )
 	if self.player == sm.localPlayer.getPlayer() then
-		if sm.localPlayer.getActiveItem() == obj_tool_bucket_empty then
+		if sm.localPlayer.getActiveItem() == ITEMS.obj_tool_bucket_empty then
 			local params = {}
 			if sm.game.getLimitedInventory() then
 				params.playerInventory = sm.localPlayer.getInventory()
@@ -236,8 +294,8 @@ function BasePlayer.cl_n_fillWater( self )
 				params.playerInventory = sm.localPlayer.getHotbar()
 			end
 			params.slotIndex = sm.localPlayer.getSelectedHotbarSlot()
-			params.previousUid = obj_tool_bucket_empty
-			params.nextUid = obj_tool_bucket_water
+			params.previousUid = ITEMS.obj_tool_bucket_empty
+			params.nextUid = ITEMS.obj_tool_bucket_water
 			params.previousQuantity = 1
 			params.nextQuantity = 1
 			self.network:sendToServer( "sv_n_exchangeItem", params )
@@ -250,7 +308,6 @@ function BasePlayer.server_onMelee( self, hitPos, attacker, damage, power, hitDi
 		return
 	end
 
-	print("'Player' took melee damage")
 	if type( attacker ) == "Unit" or type(attacker) == "Player" then
 		self:sv_takeDamage( damage, "impact" )
 	else
@@ -264,14 +321,16 @@ function BasePlayer.server_onMelee( self, hitPos, attacker, damage, power, hitDi
 	if attacker then
 		ApplyKnockback( self.player.character, hitDirection, power )
 	end
-
 end
 
-function BasePlayer.server_onExplosion( self, center, destructionLevel )
-	print("'Player' took explosion damage")
-	self:sv_takeDamage( destructionLevel * 2, "impact" )
+function BasePlayer.server_onExplosion( self, center, _, _, damage, src, srcTypeUid )
+	local source = "impact"
+	if srcTypeUid == unit_minerbot or srcTypeUid == ITEMS.obj_robotparts_minerbot_thruster then
+		source = "minerbotexplosion"
+	end
+	self:sv_takeDamage( damage, source )
 	if self.player.character:isTumbling() then
-		local knockbackDirection = ( self.player.character.worldPosition - center ):normalize()
+		local knockbackDirection = ( self.player.character.worldPosition - center ):safeNormalize( sm.vec3.new( 0, 0, 1 ) )
 		ApplyKnockback( self.player.character, knockbackDirection, 5000 )
 	end
 end
@@ -292,6 +351,7 @@ function BasePlayer.sv_startTumble( self, tumbleTickTime )
 			self.player.character:setTumbling( false )
 			self.sv.maxTumbleTimer:reset()
 			self.sv.tumbleReset:reset()
+			self.sv.tumbleSuspendedReset:reset()
 			self.sv.resistTumbleTimer:reset()
 		else
 			self.player.character:setTumbling( true )
@@ -300,6 +360,7 @@ function BasePlayer.sv_startTumble( self, tumbleTickTime )
 			else
 				self.sv.tumbleReset:start( StopTumbleTimerTickThreshold )
 			end
+			self.sv.tumbleSuspendedReset:reset()
 			return true
 		end
 	end
@@ -319,18 +380,29 @@ function BasePlayer.sv_updateTumbling( self )
 				self.player.character:setTumbling( false )
 				self.sv.maxTumbleTimer:reset()
 				self.sv.tumbleReset:reset()
+				self.sv.tumbleSuspendedReset:reset()
 				self.sv.resistTumbleTimer:reset()
 			else
-				local tumbleVelocity = self.player.character:getTumblingLinearVelocity()
-				if tumbleVelocity:length() < 1.0 then
-					self.sv.tumbleReset:tick()
-
+				local shouldRecover = false
+				-- Check if player should recover normally
+				self.sv.tumbleReset:tick()
+				if self.player.character:getTumblingLinearVelocity():length() <= StopTumbleSpeedThreshold then
 					if self.sv.tumbleReset:done() then
-						self.player.character:setTumbling( false )
-						self.sv.tumbleReset:reset()
+						shouldRecover = true
 					end
-				else
+				end
+
+				-- Check if player should recover because of being suspended
+				self.sv.tumbleSuspendedReset:tick() -- Resets with each server_onCollision
+				if self.sv.tumbleSuspendedReset:done() then
+					shouldRecover = true
+				end
+
+				if shouldRecover then
+					self.player.character:setTumbling( false )
 					self.sv.tumbleReset:reset()
+					self.sv.tumbleSuspendedReset:reset()
+					self.sv.maxTumbleTimer:reset()
 				end
 			end
 		end
@@ -350,27 +422,35 @@ function BasePlayer.server_onCollision( self, other, collisionPosition, selfPoin
 		return
 	end
 
+	self.sv.tumbleSuspendedReset:reset() -- Suspended tumble recovery resets with each collision
+
 	if not self.sv.impactCooldown:done() then
 		return
 	end
 
 	local collisionDamageMultiplier = 0.25
 	local maxHp = 100
-	if self.sv.saved.stats and self.sv.saved.stats.maxhp then
-		maxHp = self.sv.saved.stats.maxhp
+	local fallDamageMultiplier = 1.0
+	if self.sv.saved.stats then
+		if self.sv.saved.stats.maxhp then
+			maxHp = self.sv.saved.stats.maxhp
+		end
+	
+		if self.sv.saved.stats.perks and self.sv.saved.stats.perks[SurvivalPlayer.Perks.FallProtection] then
+			fallDamageMultiplier = fallDamageMultiplier * SurvivalPlayer.BuffFallProtectionMult
+		end
 	end
+
 	local damage, tumbleTicks, tumbleVelocity, impactReaction = CharacterCollision( self.player.character, other, collisionPosition, selfPointVelocity, otherPointVelocity, collisionNormal, maxHp / collisionDamageMultiplier, 24 )
 	damage = damage * collisionDamageMultiplier
 	if damage > 0 or tumbleTicks > 0 then
 		self.sv.impactCooldown:start( 0.25 * 40 )
 	end
 	if damage > 0 then
-		print("'Player' took", damage, "collision damage")
 		self:sv_takeDamage( damage, "shock" )
 	end
-
 	if self.sv.saved and self.sv.saved.enableHealth then
-		if tumbleTicks > 0 then
+		if tumbleTicks > 0 and self.sv.collisionTumbleImmunity:done() then
 			if self:sv_startTumble( tumbleTicks ) then
 				-- Limit tumble velocity
 				if tumbleVelocity:length2() > MaxTumbleImpulseSpeed * MaxTumbleImpulseSpeed then
@@ -385,13 +465,15 @@ function BasePlayer.server_onCollision( self, other, collisionPosition, selfPoin
 	end
 end
 
-function BasePlayer.sv_e_staminaSpend( self, stamina ) end
-
-function BasePlayer.sv_e_receiveDamage( self, damageData )
-	self:sv_takeDamage( damageData.damage )
+function BasePlayer.sv_e_grantTumbleImmunity( self, duration )
+	self.sv.collisionTumbleImmunity:start( duration )
 end
 
-function BasePlayer.sv_takeDamage( self, damage, source ) end
+function BasePlayer.sv_e_receiveDamage( self, damageData )
+	self:sv_takeDamage( damageData.damage, damageData.source )
+end
+
+function BasePlayer.sv_takeDamage( self, damage, source, typeUuid ) end
 
 function BasePlayer.sv_e_respawn( self ) end
 
@@ -399,24 +481,40 @@ function BasePlayer.sv_startFadeToBlack( self, param )
 	self.network:sendToClient( self.player, "cl_n_startFadeToBlack", { duration = param.duration, timeout = param.timeout } )
 end
 
-function BasePlayer.sv_endFadeToBlack( self, param )
-	self.network:sendToClient( self.player, "cl_n_endFadeToBlack", { duration = param.duration } )
+function BasePlayer.sv_startFadeToBlackWaitForWorld( self, param )
+	self.network:sendToClient( self.player, "cl_n_startFadeToBlackWaitForWorld", { duration = param.duration, timeout = param.timeout } )
 end
 
-function BasePlayer.cl_e_startFadeToBlack( self, param )
-	self:cl_n_startFadeToBlack( param )
+function BasePlayer.sv_endFadeToBlack( self, param )
+	self.network:sendToClient( self.player, "cl_n_endFadeToBlack", { duration = param.duration, force = param.force } )
+end
+
+function BasePlayer.cl_e_startCinematicFadeToBlack( self, param )
+	if self.cl.cameraState == CameraState.CUTSCENE then
+		sm.gui.startFadeToBlack( param.duration, param.timeout )
+	end
+end
+
+function BasePlayer.cl_e_endCinematicFadeToBlack( self, param )
+	if self.cl.cameraState == CameraState.CUTSCENE then
+		sm.gui.endFadeToBlack( param.duration )
+	end
 end
 
 function BasePlayer.cl_e_endFadeToBlack( self, param )
-	self:cl_n_endFadeToBlack( param )
+	sm.gui.endFadeToBlack( param.duration )
 end
 
 function BasePlayer.cl_n_startFadeToBlack( self, param )
 	sm.gui.startFadeToBlack( param.duration, param.timeout )
 end
 
+function BasePlayer.cl_n_startFadeToBlackWaitForWorld( self, param )
+	sm.gui.startFadeToBlackWaitForWorld( param.duration, param.timeout )
+end
+
 function BasePlayer.cl_n_endFadeToBlack( self, param )
-	sm.gui.endFadeToBlack( param.duration )
+	sm.gui.endFadeToBlack( param.duration, param.force )
 end
 
 function BasePlayer.sv_e_onSpawnCharacter( self ) end
@@ -427,14 +525,11 @@ function BasePlayer.sv_e_eat( self, edibleParams ) end
 
 function BasePlayer.sv_e_feed( self, params ) end
 
-function BasePlayer.sv_e_setRefiningState( self, params )
-	local userPlayer = params.user:getPlayer()
-	if userPlayer then
-		if params.state == true then
-			userPlayer:sendCharacterEvent( "refine" )
-		else
-			userPlayer:sendCharacterEvent( "refineEnd" )
-		end
+function BasePlayer.sv_e_setRefiningState( self, state )
+	if state == true then
+		self.player:sendCharacterEvent( "refineStart" )
+	else
+		self.player:sendCharacterEvent( "refineEnd" )
 	end
 end
 
@@ -448,7 +543,7 @@ function BasePlayer.cl_n_onLoot( self, params )
 		color = sm.shape.getShapeTypeColor( params.uuid )
 	end
 	local effectName = params.effectName or "Loot - Pickup"
-	sm.effect.playEffect( effectName, params.pos, sm.vec3.zero(), sm.quat.identity(), sm.vec3.one(), { ["Color"] = color } )
+	sm.effect.playEffect( effectName, params.pos, sm.vec3.zero(), params.rot or sm.quat.identity(), sm.vec3.one(), { ["Color"] = color } )
 end
 
 function BasePlayer.sv_e_onMsg( self, msg )
@@ -456,7 +551,7 @@ function BasePlayer.sv_e_onMsg( self, msg )
 end
 
 function BasePlayer.cl_n_onMsg( self, msg )
-	sm.gui.displayAlertText( msg )
+	NotificationManager.Cl_AddGenericNotification( msg )
 end
 
 function BasePlayer.cl_n_onEffect( self, params )
@@ -509,6 +604,21 @@ function BasePlayer.sv_e_onExitChemical( self )
 	self.network:setClientData( self.sv.saved )
 end
 
+function BasePlayer.sv_e_onEnterRadiation( self )
+	if self.sv.radiationDamageCooldown:done() then
+		self:sv_takeDamage( RadiationDamage, "radiation" )
+		self.sv.radiationDamageCooldown:start( RadiationDamageCooldown )
+	end
+	self.network:setClientData( self.sv.saved )
+end
+
+function BasePlayer.sv_e_onStayRadiation( self )
+	if self.sv.radiationDamageCooldown:done() then
+		self:sv_takeDamage( RadiationDamage, "radiation" )
+		self.sv.radiationDamageCooldown:start( RadiationDamageCooldown )
+	end
+end
+
 function BasePlayer.sv_e_onEnterOil( self )
 	self.sv.saved.inOil = true
 	self.network:setClientData( self.sv.saved )
@@ -530,5 +640,39 @@ end
 function BasePlayer.cl_n_onMessage( self, params )
 	local message = params.message or ""
 	local displayTime = params.displayTime or 2
-	sm.gui.displayAlertText( message, displayTime )
+	NotificationManager.Cl_AddGenericNotification( message, displayTime )
+end
+
+function ItemPickupFilter( fistUuid, transactionChanges, compareUuids  )
+	if isAnyOf( fistUuid, compareUuids ) then
+		for _, otherItem in ipairs( transactionChanges ) do
+			if isAnyOf( fistUuid, compareUuids ) and otherItem.uuid ~= fistUuid then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function BasePlayer.sv_e_startPushbackSound( self )
+	self.network:sendToClient( self.player, "cl_n_startPushbackSound" )
+end
+
+function BasePlayer.sv_e_stopPushbackSound( self )
+	self.network:sendToClient( self.player, "cl_n_stopPushbackSound" )
+end
+
+function BasePlayer.cl_n_startPushbackSound( self )
+	if not self.cl.pushbackSound then
+		self.cl.pushbackSound = sm.effect.createEffect2D( "audio:event:/char/npc/bots/enemies/trashbot/pushback_wind" )
+	end
+	if not self.cl.pushbackSound:isPlaying() then
+		self.cl.pushbackSound:start()
+	end
+end
+
+function BasePlayer.cl_n_stopPushbackSound( self )
+	if self.cl.pushbackSound and self.cl.pushbackSound:isPlaying() then
+		self.cl.pushbackSound:stop()
+	end
 end
