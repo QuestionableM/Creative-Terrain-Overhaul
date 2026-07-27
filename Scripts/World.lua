@@ -1,8 +1,10 @@
-dofile( "$SURVIVAL_DATA/Scripts/game/managers/PesticideManager.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/managers/AttachedFireManager.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/managers/FireManager.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/WaterManager.lua" )
 
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_harvestable.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_projectiles.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/survival_sob.lua" )
 
 ---@class WorldClass
 World = class( nil )
@@ -15,52 +17,80 @@ World.worldBorder = true
 World.enableHarvestables = true
 
 function World:server_onCreate()
+	self.fireManager = FireManager()
+	self.fireManager:sv_onCreate(self)
+
     self.waterManager = WaterManager()
 	self.waterManager:sv_onCreate(self)
 
-	self.pesticideManager = PesticideManager()
-	self.pesticideManager:sv_onCreate()
+	self.sv = {}
+	self.sv.ambienceManager = sm.scriptableObject.createScriptableObject( sm.uuid.new("635b5d17-fa35-4591-82ec-358da595bac0"), nil, self.world )
+	self.sv.rayProjectileManager = sm.scriptableObject.createScriptableObject( sm.uuid.new( "8504131e-8f58-4d25-beab-3bc996b7a95e" ), nil, self.world )
 end
 
 function World:client_onCreate()
+	if self.fireManager == nil then
+		self.fireManager = FireManager()
+	end
+
 	if self.waterManager == nil then
 		self.waterManager = WaterManager()
 	end
 
-	if self.pesticideManager == nil then
-		self.pesticideManager = PesticideManager()
-	end
-
+	self.fireManager:cl_onCreate()
 	self.waterManager:cl_onCreate()
-	self.pesticideManager:cl_onCreate()
 end
 
 function World:server_onFixedUpdate(dt)
+	AttachedFireManager.Sv_OnWorldFixedUpdate( self.world )
+	self.fireManager:sv_onFixedUpdate()
 	self.waterManager:sv_onFixedUpdate()
-	self.pesticideManager:sv_onWorldFixedUpdate(self)
-end
-
-function World:cl_n_pesticideMsg(msg)
-	self.pesticideManager[msg.fn]( self.pesticideManager, msg )
 end
 
 function World:client_onFixedUpdate(dt)
+	AttachedFireManager.Cl_OnWorldFixedUpdate( self.world )
 	self.waterManager:cl_onFixedUpdate()
 end
 
+function World:sv_n_fireMsg( msg, player )
+	self.fireManager:sv_handleMsg( msg, player )
+end
+
+function World:cl_n_fireMsg( msg )
+	self.fireManager:cl_handleMsg( msg )
+end
+
+function World:sv_e_activateFire( name )
+	self.fireManager:sv_activateInactiveFire( name )
+end
+
+function World:sv_e_activateFires( fireList )
+	for _, name in ipairs( fireList ) do
+		self.fireManager:sv_activateInactiveFire( name )
+	end
+end
+
+function World:sv_e_removeFiresInCell( cell )
+	self.fireManager:sv_removeAllFiresInCell( cell.x, cell.y )
+end
+
 function World:server_onCellCreated(x, y)
+	self.fireManager:sv_onCellLoaded(x, y)
 	self.waterManager:sv_onCellLoaded(x, y)
 end
 
 function World:client_onCellLoaded(x, y)
+	self.fireManager:cl_onCellLoaded(x, y)
 	self.waterManager:cl_onCellLoaded(x, y)
 end
 
 function World:server_onCellLoaded(x, y)
+	self.fireManager:sv_onCellReloaded(x, y)
 	self.waterManager:sv_onCellReloaded(x, y)
 end
 
 function World:server_onCellUnloaded(x, y)
+	self.fireManager:sv_onCellUnloaded(x, y)
 	self.waterManager:sv_onCellUnloaded(x, y)
 end
 
@@ -79,23 +109,97 @@ function World:server_onProjectile(hitPos, hitTime, hitVelocity, _, attacker, da
 		end
 	end
 
-	if projectileUuid == projectile_pesticide then
+	if isAnyOf(projectileUuid, g_potatoProjectiles) then
+		sm.message.send(MESSAGE_TYPES.GENERAL.ProjectileHit, { world = self.world, position = hitPos, attacker = attacker })
+	elseif projectileUuid == projectile_clay then
+		local clayMaterial = 0
+		self.world:voxelDensityAddition(hitPos, hitNormal, 2.5, 5, clayMaterial, sm.world.voxelFilter.all, attacker)
+	elseif projectileUuid == projectile_pesticide then
 		local forward = sm.vec3.new( 0, 1, 0 )
-		local randomDir = forward:rotateZ( math.random( 0, 359 ) )
+		local randomDir = forward:rotateZ( math.rad( math.random( 0, 359 ) ) )
 		local effectPos = hitPos
 		local success, result = sm.physics.raycast( hitPos + sm.vec3.new( 0, 0, 0.1 ), hitPos - sm.vec3.new( 0, 0, PESTICIDE_SIZE.z * 0.5 ), nil, sm.physics.filter.static + sm.physics.filter.dynamicBody )
 		if success then
 			effectPos = result.pointWorld + sm.vec3.new( 0, 0, PESTICIDE_SIZE.z * 0.5 )
 		end
-		self.pesticideManager:sv_addPesticide( self, effectPos, sm.vec3.getRotation( forward, randomDir ) )
+		sm.scriptableObject.createScriptableObject( sob_pesticide_cloud, { position = effectPos, rotation = sm.vec3.getRotation( forward, randomDir ) }, self.world )
+	elseif projectileUuid == projectile_glowstick or projectileUuid == projectile_glowstick_detach then
+		if target then
+			local targetType = type( target )
+			if not (targetType == "Shape" or targetType == "Harvestable" or targetType == "VoxelTerrain" ) then
+				sm.effect.playEffect( "GlowstickProjectile - Bounce", hitPos )
+				return
+			end
+		end
+		local inputLifetime = nil
+		if userData then
+			inputLifetime = userData.lifetime
+		end
+		GlowstickManager.Sv_CreateGlowstick( { hitPos = hitPos, hitTime = hitTime, hitNormal = hitNormal, target = target, world = self.world, lifetime = inputLifetime, projectileUuid = projectileUuid } )
+	elseif projectileUuid == projectile_explosivetape then
+		sm.physics.explode( hitPos, 7, 2.0, 6.0, 25.0, "RedTapeBot - ExplosivesHit", nil, nil, nil, 35 )
+	elseif projectileUuid == projectile_smallexplosive then
+		sm.physics.explode( hitPos, 7, 2.0, 6.0, 25.0, "PropaneTank - ExplosionSmall", nil, nil, nil, 35 )
+	elseif projectileUuid == projectile_cornade_explosive then
+		sm.physics.explode( hitPos, 5, 3.0, 6.0, 25.0, "Cornnade - Explosion", nil, nil, nil, 35, attacker, EXPLOSIONS.explosion_cornade )
+	elseif projectileUuid == projectile_water then
+		AttachedFireManager.Sv_Quench( hitPos )
+		local contacts = sm.physics.getSphereContacts( hitPos, 0.4 )
+		if contacts.harvestables then
+			for _,harvestable in ipairs( contacts.harvestables ) do
+				if WaterSplashableSet[tostring( harvestable.uuid )] then
+					sm.event.sendToHarvestable( harvestable, "sv_e_waterSoil" )
+				end
+			end
+		end
+	elseif projectileUuid == projectile_flame then
+		if attacker and type( attacker ) == "Player" and sm.exists( attacker ) then
+			PotatoLauncherSplash( self.world, hitPos )
+		else
+			sm.fire.igniteSphere( hitPos, 0.25, true )
+		end
+	elseif projectileUuid == projectile_foam then
+		AttachedFireManager.Sv_Quench( hitPos )
+	elseif projectileUuid == projectile_cablebot then
+		CablebotManager.Sv_AttachCablebot( hitPos, hitVelocity:safeNormalize( sm.vec3.new( 0, 1, 0 ) ) )
+	elseif projectileUuid == projectile_trashbomb_green or projectileUuid == projectile_trashbomb_purple then
+		sm.physics.explode( hitPos, 0, 3.0, 2.0, 0, nil, nil, nil, nil, 15 )
+		local spawnChance = math.random()
+		if spawnChance <= 0.25 and attacker and type( attacker ) == "Unit" and sm.exists( attacker ) then -- 25% chance
+			self:sv_spawnTrashbubbleLoot( hitPos, attacker )
+		end
+	elseif projectileUuid == projectile_trashbomb_mass_green or projectileUuid == projectile_trashbomb_mass_purple then
+		local spawnChance = math.random()
+		if spawnChance <= 0.05 and attacker and type( attacker ) == "Unit" and sm.exists( attacker ) then -- 5% chance
+			self:sv_spawnTrashbubbleLoot( hitPos, attacker )
+		end
+	elseif projectileUuid == projectile_trashbubble_green or projectileUuid ==  projectile_trashbubble_purple then
+		self.network:sendToClients( "cl_n_updateTrashSpray", { hitPos = hitPos } )
+	elseif isAnyOf( projectileUuid, g_spawnerProjectiles ) then
+		if userData and userData.unit then
+			local yaw = math.random() * 2 * math.pi
+			if self.world:getWeightedVoxelDensityInWorldPoint( hitPos ) > 0 then
+				hitPos = hitPos + hitNormal * 1.5 -- move out of terrain in case of hitting area with high voxel density
+			end
+			sm.unit.createUnit( userData.unit, hitPos, yaw, { aggressive = true } )
+		end
+	elseif isAnyOf( projectileUuid, NuggetProjectiles ) then
+		sm.shape.createPart( ProjectileToNugget[tostring(projectileUuid)], hitPos + sm.vec3.new( 0, 0, 0.5 ), sm.quat.identity(), true )
 	end
 
-	if projectileUuid == projectile_glowstick then
-		sm.harvestable.createHarvestable( hvs_remains_glowstick, hitPos, sm.vec3.getRotation( sm.vec3.new( 0, 1, 0 ), hitVelocity:normalize() ) )
-	end
-
-	if projectileUuid == projectile_explosivetape then
-		sm.physics.explode( hitPos, 7, 2.0, 6.0, 25.0, "RedTapeBot - ExplosivesHit" )
+	if type( target ) == "Shape" and sm.exists( target ) and target.interactable and target.interactable:hasSeat() then
+		-- pass on damage from projectiles that hit a seat
+		if type( attacker ) == "Unit" or ( type( attacker ) == "Shape" and isTrapProjectile( projectileUuid ) ) or ( userData and userData.damagePlayer ) then
+			local source = "shock"
+			if projectileUuid == projectile_tape or projectileUuid == projectile_bubblewrap then
+				source = "tapebotprojectile"
+			end
+			local targetCharacter = target.interactable:getSeatCharacter()
+			local targetPlayer = targetCharacter and targetCharacter:getPlayer() or nil
+			if targetPlayer then
+				sm.event.sendToPlayer( targetPlayer, "sv_e_receiveDamage", { damage = damage, source = source } )
+			end
+		end
 	end
 end
 
