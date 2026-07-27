@@ -51,13 +51,19 @@ function Game.server_onCreate( self )
 	g_disableScrapHarvest = true
 
 	--LoadCraftingRecipes
-	self:g_loadCraftingRecipes()
+	self:loadCraftingRecipes()
 end
 
-function Game:g_loadCraftingRecipes()
-	LoadCraftingRecipes({
-		craftbot = "$SURVIVAL_DATA/CraftingRecipes/craftbot.json"
-	})
+function Game:loadCraftingRecipes()
+	local recipeSets = sm.json.open( "$SURVIVAL_DATA/CraftingRecipes/craftbot/craftbot.json" )
+	recipeSets.workbench = "$SURVIVAL_DATA/CraftingRecipes/workbench.json"
+	recipeSets.portablecrafter = "$SURVIVAL_DATA/CraftingRecipes/portablecrafter.json"
+	recipeSets.dispenser = "$SURVIVAL_DATA/CraftingRecipes/dispenser.json"
+	recipeSets.cookbot = "$SURVIVAL_DATA/CraftingRecipes/cookbot.json"
+	recipeSets.dressbot = "$SURVIVAL_DATA/CraftingRecipes/dressbot.json"
+	recipeSets.mininghubDispenser = "$SURVIVAL_DATA/CraftingRecipes/mininghubDispenser.json"
+	recipeSets.sawtable = "$SURVIVAL_DATA/CraftingRecipes/sawtable.json"
+	LoadCraftingRecipes( recipeSets )
 end
 
 function Game:cl_n_versionMismatch(id)
@@ -172,7 +178,7 @@ end]]
 
 function Game:client_onCreate()
 	if not sm.isHost then
-		self:g_loadCraftingRecipes()
+		self:loadCraftingRecipes()
 	end
 
 	gc_cl_bindChatCommands()
@@ -192,12 +198,15 @@ function Game:client_onCreate()
 	end
 
 	g_beaconManager:cl_onCreate()
-	g_unitManager:cl_onCreate()
+
+	g_radioTransmitter = sm.effect.createEffect( "Radio - Transmitter" )
+	g_radioTransmitter:setWorldAny()
+	g_boomboxTransmitter = sm.effect.createEffect( "Boombox - Transmitter" )
+	g_boomboxTransmitter:setWorldAny()
 	
 	g_survivalHud = sm.gui.createSurvivalHudGui()
-	g_survivalHud:setVisible("FoodBar", false)
-	g_survivalHud:setVisible("WaterBar", false)
-	g_survivalHud:setVisible("BindingPanel", false)
+	g_survivalHud:setVisible("StatusPanel", false)
+	g_survivalHud:setVisible("BreathPanel", false)
 end
 
 local GAME_DAYCYCLE_TIME = 900.0
@@ -268,8 +277,6 @@ function Game:server_onPlayerJoined(player, isNewPlayer)
 
 		self.sv.saved.world:loadCell( 0, 0, player, "sv_createPlayerCharacter" )
 	end
-
-	g_unitManager:sv_onPlayerJoined(player)
 end
 
 function Game:sv_createPlayerCharacter(world, x, y, player, params)
