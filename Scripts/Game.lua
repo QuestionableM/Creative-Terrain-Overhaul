@@ -656,11 +656,17 @@ function Game:cl_diag_onCloseCallback()
 	self.tmp_diag_yes_callback = nil
 end
 
-function Game:cl_n_setWeather(condition)
-	sm.gui.chatMessage(("Weather set to #ffff00%s#ffffff"):format(condition))
+function Game:cl_n_setWeather(conditionId)
+	local condition = GetWeatherConditionFromId(conditionId)
+	if condition ~= nil then
+		sm.gui.chatMessage(("Weather set to #ffff00%s#ffffff"):format(condition.displayName))
+	end
 end
 
-function Game:sv_n_setWeather(condition)
-	WeatherManager.Sv_StartCondition( condition )
-	self.network:sendToClients("cl_n_setWeather", condition)
+function Game:sv_n_setWeather(conditionId)
+	local condition = GetWeatherConditionFromId(conditionId)
+	if condition ~= nil then
+		WeatherManager.Sv_StartCondition( condition.event )
+		self.network:sendToClients("cl_n_setWeather", conditionId)
+	end
 end

@@ -95,17 +95,29 @@ local function gc_vanilla_place_harvestable(self, params)
 	self.network:sendToServer("sv_n_placeHarvestable", param_data)
 end
 
-local WeatherConditions = {
-	rain = "Rain",
-	thunder = "ThunderRain",
-	clear = "Clear",
-	cloudy = "Clouds01",
-	drizzle = "Drizzle",
+local WeatherConditionToId = {
+	["rain"] = 1,
+	["thunder"] = 2,
+	["clear"] = 3,
+	["cloudy"] = 4,
+	["drizzle"] = 5
 }
 
+local IdToWeatherCondition = {
+	[1] = { event = "Rain"       , displayName = "Rain"    },
+	[2] = { event = "ThunderRain", displayName = "Thunder" },
+	[3] = { event = "Clear"      , displayName = "Clear"   },
+	[4] = { event = "Clouds01"   , displayName = "Cloudy"  },
+	[5] = { event = "Drizzle"    , displayName = "Drizzle" }
+}
+
+function GetWeatherConditionFromId(id)
+	return IdToWeatherCondition[id]
+end
+
 local function gc_vanilla_set_weather(self, params)
-	local condition = WeatherConditions[string.lower(params[1])]
-	if condition then
+	local condition = WeatherConditionToId[string.lower(params[1])]
+	if condition ~= nil then
 		self.network:sendToServer("sv_n_setWeather", condition)
 	end
 end
