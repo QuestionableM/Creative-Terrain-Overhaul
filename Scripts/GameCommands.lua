@@ -95,6 +95,21 @@ local function gc_vanilla_place_harvestable(self, params)
 	self.network:sendToServer("sv_n_placeHarvestable", param_data)
 end
 
+local WeatherConditions = {
+	rain = "Rain",
+	thunder = "ThunderRain",
+	clear = "Clear",
+	cloudy = "Clouds01",
+	drizzle = "Drizzle",
+}
+
+local function gc_vanilla_set_weather(self, params)
+	local condition = WeatherConditions[string.lower(params[1])]
+	if condition then
+		self.network:sendToServer("sv_n_setWeather", condition)
+	end
+end
+
 local function gc_regenerate_world_yes_callback(self)
 	self.network:sendToServer("sv_n_regenerateWorld", self.tmp_gen_params)
 	self.tmp_gen_params = nil
@@ -307,6 +322,11 @@ local gc_command_list =
 		desc = "Places a harvestable at the aimed position. Must be placed on the ground. The harvestable parameter controls which harvestable to place: 'stone', 'tree', 'birch', 'leafy', 'spruce', 'pine'",
 		args = { { "string", "harvestable", false } },
 		func = gc_vanilla_place_harvestable
+	},
+	["/weather"] = {
+		desc = "Sets the weather condition",
+		args = { { "string", "condition", false, { "rain", "thunder", "clear", "cloudy", "drizzle" } } },
+		func = gc_vanilla_set_weather
 	}
 }
 

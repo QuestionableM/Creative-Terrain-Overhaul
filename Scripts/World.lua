@@ -1,10 +1,12 @@
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/AttachedFireManager.lua" )
-dofile( "$SURVIVAL_DATA/Scripts/game/managers/FireManager.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/WaterManager.lua" )
-
+dofile( "$SURVIVAL_DATA/Scripts/game/managers/WorldManager.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/managers/FireManager.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_harvestable.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_projectiles.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/survival_sob.lua" )
+
+dofile( "$GAME_DATA/Scripts/game/managers/RenderSettingsManager.lua" )
 
 ---@class WorldClass
 World = class( nil )
@@ -26,6 +28,8 @@ function World:server_onCreate()
 	self.sv = {}
 	self.sv.ambienceManager = sm.scriptableObject.createScriptableObject( sm.uuid.new("635b5d17-fa35-4591-82ec-358da595bac0"), nil, self.world )
 	self.sv.rayProjectileManager = sm.scriptableObject.createScriptableObject( sm.uuid.new( "8504131e-8f58-4d25-beab-3bc996b7a95e" ), nil, self.world )
+
+	WorldManager.Sv_RegisterWorld( "weatherworld", self.world )
 end
 
 function World:client_onCreate()
@@ -39,16 +43,20 @@ function World:client_onCreate()
 
 	self.fireManager:cl_onCreate()
 	self.waterManager:cl_onCreate()
+
+	WorldManager.Cl_RegisterWorld( "weatherworld", self.world )
 end
 
 function World:server_onFixedUpdate(dt)
 	AttachedFireManager.Sv_OnWorldFixedUpdate( self.world )
+	CablebotManager.Cl_OnWorldFixedUpdate( self.world )
 	self.fireManager:sv_onFixedUpdate()
 	self.waterManager:sv_onFixedUpdate()
 end
 
 function World:client_onFixedUpdate(dt)
 	AttachedFireManager.Cl_OnWorldFixedUpdate( self.world )
+	CablebotManager.Cl_OnWorldFixedUpdate( self.world )
 	self.waterManager:cl_onFixedUpdate()
 end
 
@@ -82,6 +90,7 @@ end
 function World:client_onCellLoaded(x, y)
 	self.fireManager:cl_onCellLoaded(x, y)
 	self.waterManager:cl_onCellLoaded(x, y)
+	RenderSettingsManager.Cl_onCellLoaded( x, y )
 end
 
 function World:server_onCellLoaded(x, y)
@@ -96,6 +105,7 @@ end
 
 function World:client_onCellUnloaded(x, y)
 	self.waterManager:cl_onCellUnloaded(x, y)
+	RenderSettingsManager.Cl_onCellUnloaded( x, y )
 end
 
 function World:server_onProjectile(hitPos, hitTime, hitVelocity, _, attacker, damage, userData, hitNormal, target, projectileUuid)
@@ -200,6 +210,49 @@ function World:server_onProjectile(hitPos, hitTime, hitVelocity, _, attacker, da
 				sm.event.sendToPlayer( targetPlayer, "sv_e_receiveDamage", { damage = damage, source = source } )
 			end
 		end
+	end
+end
+
+function World:server_onExplosion(center, destructionLevel, radius, uDamage, src, srcTypeUid)
+	self.world:sphereVoxelDensitySubtraction( center, radius, bit.bor( sm.world.voxelFilter.material0, sm.world.voxelFilter.material1, sm.world.voxelFilter.material2, sm.world.voxelFilter.material3 ), 10.0 )
+	CablebotManager.Sv_Explosion( center, radius )
+end
+
+function World:server_onMelee( hitPos, attacker, target, damage, power, hitDirection, hitNormal )
+	if type( target ) == "VoxelTerrain" and type( attacker ) == "Player" then
+		local radius = 2
+		local world = attacker:getCharacter():getWorld()
+		world:voxelDensitySubtraction( hitPos, sm.vec3.zero(), radius, { 30, 30, 30, 30, 30, 30, 30, 30 }, sm.world.voxelFilter.all )
+	end
+end
+
+function World:server_onVoxelConstruction( constructions )
+	local glowstickIds = {}
+	for _, construction in ipairs( constructions ) do
+		for i = 1, 8 do
+			if construction.densities[i] > 0 then
+				GlowstickManager.Sv_GetGlowstickIds( construction.aabbsMin[i] - 1, construction.aabbsMax[i] + 1, glowstickIds, false )
+			end
+		end
+	end
+
+	if not IsEmptyTable( glowstickIds ) then
+		GlowstickManager.Sv_CheckVoxelContact( glowstickIds )
+	end
+end
+
+function World:server_onVoxelDestruction( destructions )
+	local glowstickIds = {}
+	for _, destruction in ipairs( destructions ) do
+		for i = 1, 8 do
+			if destruction.densities[i] > 0 then
+				GlowstickManager.Sv_GetGlowstickIds( destruction.aabbsMin[i] - 1, destruction.aabbsMax[i] + 1, glowstickIds, true )
+			end
+		end
+	end
+
+	if not IsEmptyTable( glowstickIds ) then
+		GlowstickManager.Sv_CheckVoxelContact( glowstickIds )
 	end
 end
 
@@ -357,6 +410,22 @@ function World:sv_e_placeHvs(params)
 			sm.harvestable.createHarvestable( harvestableUuid, placePosition, harvestableYZRotation * harvestableRotation )
 		end
 	end
+end
+
+function World:server_onTerrainCreated()
+	GlowstickManager.Sv_WorldReady( self.world )
+end
+
+function World:server_onTerrainLoaded()
+	GlowstickManager.Sv_WorldReady( self.world )
+end
+
+function World:client_onTerrainCreated()
+	GlowstickManager.Cl_WorldReady( self.world )
+end
+
+function World:client_onTerrainLoaded()
+	GlowstickManager.Cl_WorldReady( self.world )
 end
 
 --World versions

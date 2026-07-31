@@ -1,6 +1,9 @@
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/BeaconManager.lua" )
+dofile( "$SURVIVAL_DATA/Scripts/game/managers/WorldManager.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/managers/UnitManager.lua" )
 dofile( "$SURVIVAL_DATA/Scripts/game/util/recipes.lua" )
+
+dofile( "$GAME_DATA/Scripts/game/managers/WeatherManager.lua" )
 
 dofile("GameCommands.lua")
 
@@ -17,9 +20,9 @@ Game.enableUpgrade = true
 CREATIVE_TERRAIN_OVERHAUL_VERSION = 3
 
 function Game.server_onCreate( self )
-	print("Game.server_onCreate")
-
 	self.sv = {}
+	self.sv.weatherManager = sm.scriptableObject.createScriptableObject( sm.uuid.new( "46e23051-c20b-4929-9df1-7f4f838a3802" ), { permanentForecast = "CloudyDay", resetForecast = true } )
+
 	self.sv.saved = self.storage:load()
 	if self.sv.saved == nil then
 		self.sv.saved = {}
@@ -48,10 +51,10 @@ function Game.server_onCreate( self )
 	g_unitManager = UnitManager()
 	g_unitManager:sv_onCreate(nil, { aggroCreations = true })
 
-	g_disableScrapHarvest = true
+	WorldManager.Sv_OnCreate()
 
-	--LoadCraftingRecipes
 	self:loadCraftingRecipes()
+	g_disableScrapHarvest = true
 end
 
 function Game:loadCraftingRecipes()
@@ -182,6 +185,8 @@ function Game:client_onCreate()
 	end
 
 	gc_cl_bindChatCommands()
+	WorldManager.Cl_OnCreate()
+	self.cl_renderManager = sm.clientScriptableObject.createScriptableObject( sm.uuid.new( "54563daa-dd25-4f43-9e49-7e58bd59f66a" ) )
 
 	self.network:sendToServer("sv_n_requestTime")
 	self.network:sendToServer("sv_n_checkVersion", CREATIVE_TERRAIN_OVERHAUL_VERSION)
@@ -218,6 +223,10 @@ function Game:client_onUpdate(dt)
 
 	sm.render.setOutdoorLighting(self.cl_time)
 	sm.game.setTimeOfDay(self.cl_time)
+
+	if WeatherManager.Get() then
+		WeatherManager.Get():cl_setTimeOfDay( self.cl_time )
+	end
 end
 
 function Game:server_saveAndSyncTime()
@@ -229,6 +238,8 @@ function Game:server_onFixedUpdate(dt)
 	if self.sv.saved.time_progress then
 		self.sv.saved.time = math.fmod(self.sv.saved.time + dt / GAME_DAYCYCLE_TIME, 1.0) 
 	end
+
+	WeatherManager.Sv_SetTimeOfDay( self.sv.saved.time )
 
 	if (sm.game.getCurrentTick() % 401) == 0 then
 		self:server_saveAndSyncTime()
@@ -270,6 +281,7 @@ function Game:server_clearWorld(data, caller)
 end
 
 function Game:server_onPlayerJoined(player, isNewPlayer)
+	WeatherManager.Sv_PlayerJoined( player )
 	if isNewPlayer then
 		if not sm.exists( self.sv.saved.world ) then
 			sm.world.loadWorld( self.sv.saved.world )
@@ -642,4 +654,13 @@ end
 function Game:cl_diag_onCloseCallback()
 	self.tmp_confirmDiag:destroy()
 	self.tmp_diag_yes_callback = nil
+end
+
+function Game:cl_n_setWeather(condition)
+	sm.gui.chatMessage(("Weather set to #ffff00%s#ffffff"):format(condition))
+end
+
+function Game:sv_n_setWeather(condition)
+	WeatherManager.Sv_StartCondition( condition )
+	self.network:sendToClients("cl_n_setWeather", condition)
 end

@@ -59,7 +59,7 @@
 			"singleton" : true
 		},
 		{
-			"filename": "$GAME_DATA/Scripts/game/managers/WeatherManager.lua",
+			"filename": "$CONTENT_DATA/Scripts/managers/WeatherManager.lua",
 			"classname": "WeatherManager",
 			"uuid": "46e23051-c20b-4929-9df1-7f4f838a3802",
 			"singleton" : true
