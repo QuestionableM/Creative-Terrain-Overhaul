@@ -8,6 +8,35 @@ dofile( "$CONTENT_DATA/Scripts/BasePlayer.lua" )
 ---@field cl table
 Player = class( BasePlayer )
 
+local HealthWarningThreshold = 25
+local OxygenWarningThreshold = 25
+
+Player.Perks = {
+	BonusHealth = 1,
+	HammerSpeed = 2,
+	FallProtection = 3,
+	HighJump = 4
+}
+
+local StatusPanelGui = {}
+StatusPanelGui.root = sm.json.open( "$SURVIVAL_DATA/Gui/JsonGuis/StatusPanel.gui" )
+StatusPanelGui.index = IndexWidgets( StatusPanelGui.root )
+StatusPanelGui.index["StatusPanel"].Visible = false
+
+StatusPanelGui.bar = {}
+StatusPanelGui.bar["Health"] = { baseWidth = 122, border = 2 }
+StatusPanelGui.bar["HealthLoss"] = { baseWidth = 122, border = 2 }
+StatusPanelGui.bar["HealthGain"] = { baseWidth = 122, border = 2 }
+
+StatusPanelGui.buff = DeepCopy( StatusPanelGui.index["BuffBase"] )
+
+local OxygenPanelGui = {}
+OxygenPanelGui.root = sm.json.open( "$SURVIVAL_DATA/Gui/JsonGuis/OxygenPanel.gui" )
+OxygenPanelGui.index = IndexWidgets( OxygenPanelGui.root )
+
+OxygenPanelGui.bar = {}
+OxygenPanelGui.bar["Oxygen"] = { baseWidth = 122, border = 2 }
+
 local StatsTickRate = 40
 local PerMinute = StatsTickRate / ( 40 * 60 )
 local HpRecovery = 50 * PerMinute
@@ -27,7 +56,8 @@ function Player.server_onCreate( self )
 	self.sv.saved = self.storage:load()
 	if self.sv.saved == nil then
 		self.sv.saved = {}
-		self.sv.saved.stats = { hp = 100, maxhp = 100, breath = 100, maxbreath = 100 }
+		self.sv.saved.stats = { hp = 100, maxhp = 100, breath = 100, maxbreath = 100, perks = {} }
+		self.sv.saved.enableHealth = false
 		self.sv.saved.isConscious = true
 		self.sv.saved.isNewPlayer = true
 		self.sv.saved.inChemical = false
@@ -35,7 +65,7 @@ function Player.server_onCreate( self )
 		self.storage:save( self.sv.saved )
 	else
 		if self.sv.saved.stats == nil then
-			self.sv.saved.stats = { hp = 100, maxhp = 100, breath = 100, maxbreath = 100 }
+			self.sv.saved.stats = { hp = 100, maxhp = 100, breath = 100, maxbreath = 100, perks = {} }
 		else
 			if self.sv.saved.stats.hp == nil then
 				self.sv.saved.stats.hp = 100
@@ -46,8 +76,13 @@ function Player.server_onCreate( self )
 				self.sv.saved.stats.breath = 100
 				self.sv.saved.stats.maxbreath = 100
 			end
+
+			if self.sv.saved.stats.perks == nil then
+				self.sv.saved.stats.perks = {}
+			end
 		end
 		
+		if self.sv.saved.enableHealth == nil then self.sv.saved.enableHealth = false end
 		if self.sv.saved.isConscious == nil then self.sv.saved.isConscious = true end
 		if self.sv.saved.isNewPlayer == nil then self.sv.saved.isNewPlayer = true end
 		if self.sv.saved.inChemical == nil then self.sv.saved.inChemical = false end
@@ -90,13 +125,16 @@ function Player.client_onCreate( self )
 	BasePlayer.client_onCreate( self )
 	self.cl = self.cl or {}
 	if self.player == sm.localPlayer.getPlayer() then
+		g_svServerHost = sm.localPlayer.getPlayer()
 		if g_survivalHud then
 			g_survivalHud:open()
 		end
 
-		g_svServerHost = sm.localPlayer.getPlayer()
+		self.cl.statusPanelGui = sm.jsonGui.createGui( { isHud = true, isInteractive = false, needsCursor = true, layer = "Middle" } )
+		self.cl.oxygenPanelGui = sm.jsonGui.createGui( { isHud = true, isInteractive = false, needsCursor = false } )
 
 		self.cl.underwaterEffect = sm.effect.createEffect( "Mechanic - StatusUnderwater" )
+		self.cl.raidCompletedEffect = sm.effect.createEffect2D ( "audio:event:/ui/raid/end" )
 	end
 end
 
@@ -104,12 +142,6 @@ function Player.client_onClientDataUpdate( self, data )
 	BasePlayer.client_onClientDataUpdate( self, data )
 	if sm.localPlayer.getPlayer() == self.player then
 		if self.cl.stats == nil then self.cl.stats = data.stats end -- First time copy to avoid nil errors
-
-		if g_survivalHud then
-			g_survivalHud:setVisible( "HealthBar", data.enableHealth )
-			g_survivalHud:setSliderData( "Health", data.stats.maxhp * 10 + 1, data.stats.hp * 10 )
-			g_survivalHud:setSliderData( "Breath", data.stats.maxbreath * 10 + 1, data.stats.breath * 10 )
-		end
 
 		local pl_char = self.player.character
 		if pl_char then
@@ -123,6 +155,10 @@ function Player.client_onClientDataUpdate( self, data )
 			end
 		end
 
+		if data.stats.breath <= 0 and self.cl.stats.breath > 0 then
+			NotificationManager.Cl_AddGenericNotification( "#{DAMAGE_BREATH}", 5, true )
+		end
+
 		if data.stats.hp < self.cl.stats.hp and data.stats.breath == 0 then
 			sm.gui.displayAlertText( "#{DAMAGE_BREATH}", 1 )
 		end
@@ -130,6 +166,7 @@ function Player.client_onClientDataUpdate( self, data )
 		self.cl.enableHealth = data.enableHealth
 		self.cl.stats = data.stats
 		self.cl.isConscious = data.isConscious
+		self.cl.statsAge = 0
 	end
 end
 
@@ -143,6 +180,16 @@ function Player.cl_n_onInventoryChanges( self, params )
 	end
 end
 
+local function SetBarWidth( panel, name, value, max )
+	local bar = panel.bar[name]
+	local width = math.floor( clamp( value / max, 0.0, 1.0 ) * bar.baseWidth ) + bar.border * 2
+	if panel.index[name] == nil then
+		sm.log.error( "Missing widget: " .. name )
+	end
+	panel.index[name].width = width
+	panel.index[name].Visible = value > 0
+end
+
 function Player.cl_localPlayerUpdate( self, dt )
 	BasePlayer.cl_localPlayerUpdate( self, dt )
 
@@ -154,6 +201,172 @@ function Player.cl_localPlayerUpdate( self, dt )
 		end
 
 		self.cl.underwaterEffect:setPosition(character.worldPosition)
+	end
+
+	if character and self.cl.stats then
+		self.cl.statsAge = self.cl.statsAge + dt
+		local FlashTimeInterval = 0.9
+		self.cl.flashTimeFraction = self.cl.flashTimeFraction or 0
+		local lowFlash = false
+		local highFlash = false
+		if self.cl.resetFlashTime then
+			self.cl.flashTimeFraction = 0.0
+			lowFlash = true
+		else
+			if self.cl.flashTimeFraction < 1 and self.cl.flashTimeFraction + dt / FlashTimeInterval >= 1 then
+				lowFlash = true
+			end
+			if self.cl.flashTimeFraction < 0.5 and self.cl.flashTimeFraction + dt / FlashTimeInterval >= 0.5 then
+				highFlash = true
+			end
+			self.cl.flashTimeFraction = ( self.cl.flashTimeFraction + dt / FlashTimeInterval ) % 1
+		end
+		self.cl.resetFlashTime = true
+
+		local flash = math.cos( ( self.cl.flashTimeFraction + 0.5 ) * math.pi * 2 ) * 0.5 + 0.5
+
+		self.cl.hpLoss = self.cl.hpLoss or self.cl.stats.hp
+		if self.cl.hpHistory then
+			local delayedHp = self.cl.hpHistory[40]
+			if self.cl.hpLoss > delayedHp then
+				self.cl.hpLoss = math.max( self.cl.hpLoss - self.cl.stats.maxhp * dt, delayedHp )
+			elseif self.cl.hpLoss < delayedHp then
+				self.cl.hpLoss = self.cl.stats.hp
+			end
+		end
+
+		local screenWidth, screenHeight = sm.jsonGui.getViewSize()
+		StatusPanelGui.root.x = math.floor( -screenWidth / 2 + StatusPanelGui.root.width * 0.5 )
+		StatusPanelGui.root.y = math.floor( screenHeight / 2 - StatusPanelGui.root.height * 0.5 )
+		StatusPanelGui.index["StatusPanel"].Visible = self.cl.enableHealth
+		if StatusPanelGui.index["StatusPanel"].Visible then	
+			SetBarWidth( StatusPanelGui, "Health", self.cl.stats.hp, self.cl.stats.maxhp )
+			SetBarWidth( StatusPanelGui, "HealthLoss", self.cl.hpLoss, self.cl.stats.maxhp )
+	
+			local activeItem = sm.localPlayer.getActiveItem()
+			local edible = sm.item.getEdible( activeItem )
+			if edible and not character:isSeated() then
+				local hpGain = edible.hpGain or 0
+				SetBarWidth( StatusPanelGui, "HealthGain", self.cl.stats.hp + hpGain, self.cl.stats.maxhp )
+			else
+				SetBarWidth( StatusPanelGui, "HealthGain", self.cl.stats.hp, self.cl.stats.maxhp )
+			end
+	
+			-- Health warning flash
+			if self.cl.stats.hp > 0 and self.cl.stats.hp < HealthWarningThreshold then
+				if not StatusPanelGui.index["HealthIconGlow"].Visible and lowFlash then
+					StatusPanelGui.index["HealthIconGlow"].Visible = true
+				end
+				self.cl.resetFlashTime = false
+			else
+				if StatusPanelGui.index["HealthIconGlow"].Visible and lowFlash then
+					StatusPanelGui.index["HealthIconGlow"].Visible = false
+				end
+			end
+			if StatusPanelGui.index["HealthIconGlow"].Visible then
+				StatusPanelGui.index["HealthIconGlow"].Alpha = flash
+				self.cl.resetFlashTime = false
+			end
+		end
+
+		-- Oxygen
+		OxygenPanelGui.root.x = 0
+		OxygenPanelGui.root.y = math.floor( -screenHeight / 2 + OxygenPanelGui.root.height * 0.5 )
+
+		OxygenPanelGui.index["OxygenPanel"].Visible = self.cl.stats.breath < self.cl.stats.maxbreath
+
+		if OxygenPanelGui.index["OxygenPanel"].Visible then
+			local beathEstimate = self.cl.stats.breath - BreathLostPerTick * 40 * self.cl.statsAge
+			SetBarWidth( OxygenPanelGui, "Oxygen", beathEstimate, self.cl.stats.maxbreath )
+
+			-- Oxygen update flash
+			if self.cl.stats.breath < self.cl.stats.maxbreath then
+				if not self.cl.flashBreath and highFlash then
+					self.cl.flashBreath = true
+				end
+				self.cl.resetFlashTime = false
+			else
+				if self.cl.flashBreath and highFlash then
+					self.cl.flashBreath = false
+				end
+			end
+			if self.cl.flashBreath then
+				OxygenPanelGui.index["OxygenIcon"].Alpha = flash * 0.5 + 0.5
+				self.cl.resetFlashTime = false
+			else
+				OxygenPanelGui.index["OxygenIcon"].Alpha = 1.0
+			end
+
+			-- Oxygen warning flash
+			if self.cl.stats.breath < OxygenWarningThreshold then
+				if not OxygenPanelGui.index["OxygenIconGlow"].Visible and lowFlash then
+					OxygenPanelGui.index["OxygenIconGlow"].Visible = true
+				end
+				self.cl.resetFlashTime = false
+			else
+				if OxygenPanelGui.index["OxygenIconGlow"].Visible and lowFlash then
+					OxygenPanelGui.index["OxygenIconGlow"].Visible = false
+				end
+			end
+			if OxygenPanelGui.index["OxygenIconGlow"].Visible then
+				OxygenPanelGui.index["OxygenIconGlow"].Alpha = flash
+				self.cl.resetFlashTime = false
+			end
+		else
+			self.cl.flashBreath = nil
+			OxygenPanelGui.index["OxygenIconGlow"].Visible = false
+		end
+
+		-- Perks
+		local count = 0
+		local BuffHolderChilds = StatusPanelGui.index["BuffHolder"].Childs
+
+		for key, _ in pairs( self.cl.stats.perks ) do
+			count = count + 1
+
+			local buffBase
+			if BuffHolderChilds[count] then
+				buffBase = BuffHolderChilds[count]
+			else
+				buffBase = DeepCopy( StatusPanelGui.buff )
+				BuffHolderChilds[#BuffHolderChilds+1] = buffBase
+			end
+
+			if key == Player.Perks.BonusHealth then
+				buffBase.Childs[1].Skin = "StatusPanelBuffBonusHealth"
+				buffBase.Childs[1].ToolTip.Text = "#{STATUS_PANEL_BUFF_BONUS_HEALTH}"
+			elseif key == Player.Perks.HammerSpeed then
+				buffBase.Childs[1].Skin = "StatusPanelBuffHammer"
+				buffBase.Childs[1].ToolTip.Text = "#{STATUS_PANEL_BUFF_HAMMER_SPEED}"
+			elseif key == Player.Perks.FallProtection then
+				buffBase.Childs[1].Skin = "StatusPanelBuffFallDamage"
+				buffBase.Childs[1].ToolTip.Text = "#{STATUS_PANEL_BUFF_FALL_PROTECTION}"
+			elseif key == Player.Perks.HighJump then
+				buffBase.Childs[1].Skin = "StatusPanelBuffJump"
+				buffBase.Childs[1].ToolTip.Text = "#{STATUS_PANEL_BUFF_HIGH_JUMP}"
+			else
+				buffBase.Childs[1].Skin = "WhiteSkin"
+			end
+
+			if self.cl.newPerks and self.cl.newPerks[key] == true then
+				buffBase.Childs[1].Childs[1].Effects[1].PlayState = "Auto play once"
+				buffBase.Childs[1].Childs[1].Effects[1].ResetPlayOnce = true
+				self.cl.newPerks[key] = nil
+			else
+				buffBase.Childs[1].Childs[1].Effects[1].PlayState = "Auto play off"
+			end
+		end
+
+		while #BuffHolderChilds > count do
+			table.remove( BuffHolderChilds )
+		end
+		
+		if self.cl.statusPanelGui then
+			self.cl.statusPanelGui:render( StatusPanelGui.root )
+		end
+		if self.cl.oxygenPanelGui then
+			self.cl.oxygenPanelGui:render( OxygenPanelGui.root )
+		end
 	end
 end
 
@@ -195,8 +408,9 @@ function Player.server_onFixedUpdate( self, dt )
 	end
 
 	local character = self.player:getCharacter()
-	if character and self.sv.saved.isConscious then
-		if character:isDiving() and self.sv.saved.enableHealth then
+	if character then
+		local isDiving = character:isDiving() and not ( character:getLockingInteractable() and isAnyOf( character:getLockingInteractable().shape.uuid, SubmersibleSeats ) )
+		if isDiving and self.sv.saved.enableHealth then
 			self.sv.saved.stats.breath = math.max( self.sv.saved.stats.breath - BreathLostPerTick, 0 )
 			if self.sv.saved.stats.breath == 0 then
 				self.sv.drownTimer:tick()
@@ -209,6 +423,9 @@ function Player.server_onFixedUpdate( self, dt )
 				end
 			end
 		else
+			if self.sv.saved.stats.breath == 0 then
+				sm.effect.playEffect( "Mechanic - Exhausted", self.player.character.worldPosition )
+			end
 			self.sv.saved.stats.breath = self.sv.saved.stats.maxbreath
 			self.sv.drownTimer:start( DrownDamageCooldown )
 		end
@@ -227,6 +444,37 @@ function Player.server_onFixedUpdate( self, dt )
 	end
 end
 
+local DamageSourceToEvent = {
+	-- standard
+	["drown"] = "drown",
+	["fatigue"] = "fatigue",
+	["shock"] = "shock",
+	["impact"] = "impact",
+	["fire"] = "fire",
+	["poison"] = "poison",
+	-- custom
+	["scannerbot"] = "impact",
+	["minerbotprojectile"] = "shock",
+	["minerbotexplosion"] = "impact",
+	["tapebotprojectile"] = "shock"
+}
+
+local SeatSafeDamageSources = {
+	["fatigue"] = true,
+	["scannerbot"] = true,
+	["minerbotprojectile"] = true,
+	["minerbotexplosion"] = true,
+	["tapebotprojectile"] = true
+}
+
+local function GetDamageEvent( source )
+	if DamageSourceToEvent[source] then
+		return DamageSourceToEvent[source]
+	end
+	return "impact"
+end
+
+
 function Player.sv_takeDamage( self, damage, source )
 	if not sm.exists( self.player.character ) then
 		return
@@ -240,14 +488,14 @@ function Player.sv_takeDamage( self, damage, source )
 			lockingInteractable:setSeatCharacter( character )
 		end
 
-		if self.sv.saved.enableHealth and self.sv.damageCooldown:done() then
-			if self.sv.saved.isConscious then
+		if self.sv.saved.enableHealth then
+			if self.sv.saved.isConscious and self.sv.damageCooldown:done() then
 				self.sv.saved.stats.hp = math.max( self.sv.saved.stats.hp - damage, 0 )
-
 				print( "'Player' took:", damage, "damage.", self.sv.saved.stats.hp, "/", self.sv.saved.stats.maxhp, "HP" )
 
 				if source then
-					self.network:sendToClients( "cl_n_onEvent", { event = source, pos = character:getWorldPosition(), damage = damage * 0.01 } )
+					local event = GetDamageEvent(source)
+					self.network:sendToClients( "cl_n_onEvent", { event = event, pos = character:getWorldPosition(), damage = damage * 0.01 } )
 				else
 					self.player:sendCharacterEvent( "hit" )
 				end
@@ -258,10 +506,21 @@ function Player.sv_takeDamage( self, damage, source )
 					self.sv.saved.isConscious = false
 					character:setTumbling( true )
 					character:setDowned( true )
+					sm.effect.playEffect( "Mechanic - Ko", character.worldPosition )
 				end
 
 				self.storage:save( self.sv.saved )
 				self.network:setClientData( self.sv.saved )
+			end
+
+			local isSeatSafeDamage = SeatSafeDamageSources[source] or false
+			if not isSeatSafeDamage then
+				if self.sv.saved.isConscious then
+					local lockingInteractable = character:getLockingInteractable()
+					if lockingInteractable and lockingInteractable:hasSeat() then
+						lockingInteractable:setSeatCharacter( character )
+					end
+				end
 			end
 		else
 			print( "'Player' resisted", damage, "damage" )
@@ -354,7 +613,7 @@ function Player:sv_e_setSpawnpoint()
 	end
 end
 
-function Player.sv_e_enableHealth( self, enableHealth )
+function Player:sv_e_enableHealth( enableHealth )
 	if enableHealth == nil then
 		self.sv.saved.enableHealth = not self.sv.saved.enableHealth
 	else

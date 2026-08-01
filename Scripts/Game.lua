@@ -44,6 +44,7 @@ function Game.server_onCreate( self )
 	end
 
 	g_enableCharacterHealing = self.sv.saved.enable_healing
+	g_disableScrapHarvest = true
 
 	g_beaconManager = BeaconManager()
 	g_beaconManager:sv_onCreate()
@@ -54,7 +55,6 @@ function Game.server_onCreate( self )
 	WorldManager.Sv_OnCreate()
 
 	self:loadCraftingRecipes()
-	g_disableScrapHarvest = true
 end
 
 function Game:loadCraftingRecipes()
@@ -212,6 +212,7 @@ function Game:client_onCreate()
 	g_survivalHud = sm.gui.createSurvivalHudGui()
 	g_survivalHud:setVisible("StatusPanel", false)
 	g_survivalHud:setVisible("BreathPanel", false)
+	g_survivalHud:setVisible("BindingPanel", false)
 end
 
 local GAME_DAYCYCLE_TIME = 900.0

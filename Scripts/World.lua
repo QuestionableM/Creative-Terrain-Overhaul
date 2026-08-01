@@ -108,6 +108,30 @@ function World:client_onCellUnloaded(x, y)
 	RenderSettingsManager.Cl_onCellUnloaded( x, y )
 end
 
+local WaterSplashableSet = {
+	[tostring( hvs_soil )] = true,
+	[tostring( hvs_growing_blueberry )] = true,
+	[tostring( hvs_growing_banana )] = true,
+	[tostring( hvs_growing_redbeet )] = true,
+	[tostring( hvs_growing_carrot )] = true,
+	[tostring( hvs_growing_tomato )] = true,
+	[tostring( hvs_growing_orange )] = true,
+	[tostring( hvs_growing_potato )] = true,
+	[tostring( hvs_growing_pineapple )] = true,
+	[tostring( hvs_growing_broccoli )] = true,
+	[tostring( hvs_growing_cotton )] = true,
+	[tostring( hvs_growing_chili )] = true,
+	[tostring( hvs_growing_pigmentflower )] = true,
+}
+
+local NuggetProjectiles = {
+	projectile_T1,
+	projectile_T2,
+	projectile_T3,
+	projectile_T4,
+	projectile_T5
+}
+
 function World:server_onProjectile(hitPos, hitTime, hitVelocity, _, attacker, damage, userData, hitNormal, target, projectileUuid)
 	-- Notify units about projectile hit
 	if isAnyOf( projectileUuid, g_potatoProjectiles ) then
