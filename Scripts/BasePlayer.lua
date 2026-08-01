@@ -255,14 +255,23 @@ function BasePlayer.cl_updateTumbling( self )
 	end
 end
 
+local allowed_attackers =
+{
+	["Unit"] = true,
+	["Shape"] = true,
+	["Player"] = true
+}
+
 function BasePlayer.server_onProjectile( self, hitPos, hitTime, hitVelocity, _, attacker, damage, userData, hitNormal, projectileUuid )
-	if type( attacker ) == "Unit" or ( type( attacker ) == "Shape" and isTrapProjectile( projectileUuid ) ) or ( userData and userData.damagePlayer ) then
+	if allowed_attackers[type(attacker)] == true then
 		local source = "shock"
 		if projectileUuid == projectile_tape or projectileUuid == projectile_bubblewrap then
 			source = "tapebotprojectile"
 		end
+
 		self:sv_takeDamage( damage, source, projectileUuid )
-	end
+	end	
+
 	if self.player.character:isTumbling() then
 		ApplyKnockback( self.player.character, hitVelocity:normalize(), 2000 )
 	end
