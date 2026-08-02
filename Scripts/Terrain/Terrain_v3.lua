@@ -177,15 +177,29 @@ function GetMaterialAt( x, y, lod )
 	return 0, 0, 0, 0, 0, 0, 0, 0
 end
 
-local ground_clutter = { -1, 9, 0, 15, 19, 14, 20, 22 }
-local desert_clutter_table = { 19, 15, 5 }
+-- pre 1.0 indexes
+--local ground_clutter = { -1,  9, 0, 15, 19, 14, 20, 22 }
+--local desert_clutter_table = { 19, 15, 5 }
+--[[
 local underwater_clutter =
 {
 	--id -> max_height
-	{ -1, 0 },
+	{ -1,   0 },
 	{ 39, -21 },
 	{ 40, -23 },
 	{ 41, -27 }
+}
+]]
+
+local ground_clutter = { -1, 10, 0, 17, 21, 16, 22, 24 }
+local desert_clutter_table = { 21, 17, 6 }
+local underwater_clutter =
+{
+	--id -> max_height
+	{ -1,   0 },
+	{ 41, -21 },
+	{ 42, -23 },
+	{ 43, -27 }
 }
 
 local ground_clutter_sz = #ground_clutter
