@@ -48,6 +48,8 @@ function World:server_onDestroy()
 end
 
 function World:client_onCreate()
+	self.world.clientPublicData = { musicParameter = 7 }
+
 	if self.fireManager == nil then
 		self.fireManager = FireManager()
 	end
