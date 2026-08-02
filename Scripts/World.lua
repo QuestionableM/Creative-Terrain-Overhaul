@@ -15,8 +15,11 @@ World.cellMinX = -101
 World.cellMaxX = 100
 World.cellMinY = -101
 World.cellMaxY = 100
+World.renderMode = "outdoor"
 World.worldBorder = true
 World.enableHarvestables = true
+World.horizonWater = true
+World.hLod = true
 
 function World:server_onCreate()
 	self.fireManager = FireManager()
@@ -30,6 +33,18 @@ function World:server_onCreate()
 	self.sv.rayProjectileManager = sm.scriptableObject.createScriptableObject( sm.uuid.new( "8504131e-8f58-4d25-beab-3bc996b7a95e" ), nil, self.world )
 
 	WorldManager.Sv_RegisterWorld( "weatherworld", self.world )
+end
+
+function World:server_onDestroy()
+	GlowstickManager.Sv_WorldUnloaded( self.world )
+	if self.sv.ambienceManager then
+		self.sv.ambienceManager:destroy()
+		self.sv.ambienceManager = nil
+	end
+	if self.sv.rayProjectileManager then
+		self.sv.rayProjectileManager:destroy()
+		self.sv.rayProjectileManager = nil
+	end
 end
 
 function World:client_onCreate()
@@ -90,6 +105,7 @@ end
 function World:client_onCellLoaded(x, y)
 	self.fireManager:cl_onCellLoaded(x, y)
 	self.waterManager:cl_onCellLoaded(x, y)
+	AmbienceManager.Cl_OnCellLoaded( self.world, x, y )
 	RenderSettingsManager.Cl_onCellLoaded( x, y )
 end
 
@@ -105,6 +121,7 @@ end
 
 function World:client_onCellUnloaded(x, y)
 	self.waterManager:cl_onCellUnloaded(x, y)
+	AmbienceManager.Cl_OnCellUnloaded( self.world, x, y )
 	RenderSettingsManager.Cl_onCellUnloaded( x, y )
 end
 
@@ -135,12 +152,7 @@ local NuggetProjectiles = {
 function World:server_onProjectile(hitPos, hitTime, hitVelocity, _, attacker, damage, userData, hitNormal, target, projectileUuid)
 	-- Notify units about projectile hit
 	if isAnyOf( projectileUuid, g_potatoProjectiles ) then
-		local units = sm.unit.getAllUnits()
-		for i, unit in ipairs( units ) do
-			if InSameWorld( self.world, unit ) then
-				sm.event.sendToUnit( unit, "sv_e_worldEvent", { eventName = "projectileHit", hitPos = hitPos, hitTime = hitTime, hitVelocity = hitVelocity, attacker = attacker, damage = damage })
-			end
-		end
+		sm.message.send( MESSAGE_TYPES.GENERAL.ProjectileHit, { world = self.world, position = hitPos, attacker = attacker } )
 	end
 
 	if isAnyOf(projectileUuid, g_potatoProjectiles) then
