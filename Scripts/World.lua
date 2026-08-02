@@ -18,7 +18,6 @@ World.cellMaxY = 100
 World.renderMode = "outdoor"
 World.worldBorder = true
 World.enableHarvestables = true
-World.horizonWater = true
 World.hLod = true
 
 function World:server_onCreate()
