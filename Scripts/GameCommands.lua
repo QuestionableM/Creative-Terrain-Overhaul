@@ -122,9 +122,17 @@ local function gc_vanilla_set_weather(self, params)
 	end
 end
 
-local function gc_regenerate_world_yes_callback(self)
-	self.network:sendToServer("sv_n_regenerateWorld", self.tmp_gen_params)
-	self.tmp_gen_params = nil
+local function gc_create_yesno_dialog(self, title, message, yesCallback)
+	local confirmDiag = sm.gui.createGuiFromLayout("$GAME_DATA/Gui/Layouts/PopUp/PopUp_YN.layout")
+	confirmDiag:setButtonCallback("Yes", "cl_diag_onButtonCallback")
+	confirmDiag:setButtonCallback("No", "cl_diag_onButtonCallback")
+	confirmDiag:setOnCloseCallback("cl_diag_onCloseCallback")
+	confirmDiag:setText("Title", title)
+	confirmDiag:setText("Message", message)
+	confirmDiag:open()
+
+	self.tmp_confirmDiag = confirmDiag
+	self.tmp_diag_yes_callback = yesCallback
 end
 
 local function gc_regenerate_world(self, params)
@@ -141,18 +149,14 @@ local function gc_regenerate_world(self, params)
 		end
 	end
 
-	local cl_confirmDiag = sm.gui.createGuiFromLayout("$GAME_DATA/Gui/Layouts/PopUp/PopUp_YN.layout")
-	cl_confirmDiag:setButtonCallback("Yes", "cl_diag_onButtonCallback")
-	cl_confirmDiag:setButtonCallback("No", "cl_diag_onButtonCallback")
-	cl_confirmDiag:setOnCloseCallback("cl_diag_onCloseCallback")
-	cl_confirmDiag:setText("Title", "Regenerate World")
-	cl_confirmDiag:setText("Message", "#888888Are you sure that you want to regenerate the world? #ffff00All#888888 unsaved creations will be lost!")
-	cl_confirmDiag:open()
-
-	self.tmp_gen_params = params
-
-	self.tmp_confirmDiag = cl_confirmDiag
-	self.tmp_diag_yes_callback = gc_regenerate_world_yes_callback
+	gc_create_yesno_dialog(
+		self,
+		"Regenerate World",
+		"#888888Are you sure that you want to regenerate the world? #ffff00All#888888 unsaved creations will be lost!",
+		function (self)
+			self.network:sendToServer("sv_n_regenerateWorld", params)
+		end
+	)
 end
 
 local function gc_get_world_seed(self, params)
@@ -213,6 +217,32 @@ end
 
 local function gc_ragdoll_character(self, params)
 	self.network:sendToServer("sv_n_ragdollCharacter")
+end
+
+local function gc_vanilla_kickban_generic(self, isBanMode, playerId)
+	local actionName = isBanMode and "Ban" or "Kick"
+	local callbackName = isBanMode and "sv_n_banPlayer" or "sv_n_kickPlayer"
+
+	if sm.player.getHostPlayer().id == playerId then
+		sm.gui.chatMessage(("#ff0000ERROR#ffffff: You cannot %s yourself"):format(string.lower(actionName)))
+		return
+	end
+
+	for _, v in pairs(sm.player.getAllPlayers()) do
+		if v.id == playerId then
+			gc_create_yesno_dialog(
+				self,
+				("%s player"):format(actionName),
+				("#888888Are you sure you want to %s #ffff00%s#888888?"):format(string.lower(actionName), v.name),
+				function (self)
+					self.network:sendToServer(callbackName, playerId)
+				end
+			)
+			return
+		end
+	end
+
+	sm.gui.chatMessage("#ff0000ERROR#ffffff: The specified player could not be found")
 end
 
 local gc_command_list =
@@ -339,6 +369,19 @@ local gc_command_list =
 		desc = "Sets the weather condition",
 		args = { { "string", "condition", false, { "rain", "thunder", "clear", "cloudy", "drizzle" } } },
 		func = gc_vanilla_set_weather
+	},
+
+	["/kick"] = {
+		desc = "Kick a player from server",
+		args = { { "int", "player id", false } },
+		func = function (self, params) gc_vanilla_kickban_generic(self, false, params[1]) end,
+		host_only = true
+	},
+	["/ban"] = {
+		desc = "Ban a player from server",
+		args = { { "int", "player id", false } },
+		func = function (self, params) gc_vanilla_kickban_generic(self, true, params[1]) end,
+		host_only = true
 	}
 }
 

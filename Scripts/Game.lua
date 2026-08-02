@@ -671,3 +671,68 @@ function Game:sv_n_setWeather(conditionId)
 		self.network:sendToClients("cl_n_setWeather", conditionId)
 	end
 end
+
+local PLAYER_MANAGEMENT_MESSAGE_IDS =
+{
+	FORBIDDEN = 1,
+	NOT_FOUND = 2,
+	KICKED = 3,
+	BANNED = 4
+}
+
+local PLAYER_MANAGEMENT_MESSAGES =
+{
+	[PLAYER_MANAGEMENT_MESSAGE_IDS.FORBIDDEN] = "#ff0000ERROR#ffffff: You are not allowed to use this command",
+	[PLAYER_MANAGEMENT_MESSAGE_IDS.NOT_FOUND] = "#ff0000ERROR#ffffff: The specified player could not be found",
+	[PLAYER_MANAGEMENT_MESSAGE_IDS.KICKED] = "Player #ffff00%s#ffffff (id: #ffff00%i#ffffff) has been kicked!",
+	[PLAYER_MANAGEMENT_MESSAGE_IDS.BANNED] = "Player #ffff00%s#ffffff (id: #ffff00%i#ffffff) has been banned!"
+}
+
+function Game:cl_n_playerManagementMessage(data)
+	if type(data) ~= "table" or data.msg == nil then return end
+
+	local curMsg = PLAYER_MANAGEMENT_MESSAGES[data.msg]
+	if curMsg == nil then return end
+
+	if data.arg	== nil then
+		sm.gui.chatMessage(curMsg)
+	elseif type(data.arg) == "table" then
+		sm.gui.chatMessage((curMsg):format(unpack(data.arg)))
+	end
+end
+
+function Game:sv_n_kickPlayer(playerId, sender)
+	local hostPlayer = sm.player.getHostPlayer()
+	if sender ~= hostPlayer then
+		self.network:sendToClient(sender, "cl_n_playerManagementMessage", { msg = PLAYER_MANAGEMENT_MESSAGE_IDS.FORBIDDEN })
+		return
+	end
+
+	for _, v in pairs(sm.player.getAllPlayers()) do
+		if v.id == playerId and v ~= hostPlayer then
+			self.network:sendToClient(sender, "cl_n_playerManagementMessage", { msg = PLAYER_MANAGEMENT_MESSAGE_IDS.KICKED, arg = { v.name, v.id } })
+			sm.game.kickPlayer(v)
+			return
+		end
+	end
+
+	self.network:sendToClient(sender, "cl_n_playerManagementMessage", { msg = PLAYER_MANAGEMENT_MESSAGE_IDS.NOT_FOUND })
+end
+
+function Game:sv_n_banPlayer(playerId, sender)
+	local hostPlayer = sm.player.getHostPlayer()
+	if sender ~= hostPlayer then
+		self.network:sendToClient(sender, "cl_n_playerManagementMessage", { msg = PLAYER_MANAGEMENT_MESSAGE_IDS.FORBIDDEN })
+		return
+	end
+
+	for _, v in pairs(sm.player.getAllPlayers()) do
+		if v.id == playerId and v ~= hostPlayer then
+			self.network:sendToClient(sender, "cl_n_playerManagementMessage", { msg = PLAYER_MANAGEMENT_MESSAGE_IDS.BANNED, arg = { v.name, v.id } })
+			sm.game.banPlayer(v)
+			return
+		end
+	end
+
+	self.network:sendToClient(sender, "cl_n_playerManagementMessage", { msg = PLAYER_MANAGEMENT_MESSAGE_IDS.NOT_FOUND })
+end
