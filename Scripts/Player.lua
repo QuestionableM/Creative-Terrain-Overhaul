@@ -51,6 +51,10 @@ local BreathLostPerTick = ( 100 / 60 ) / 40
 local DrownDamage = 5
 local DrownDamageCooldown = 40
 
+local SubmersibleSeats = {
+	obj_interactive_turretseat_05_sphere
+}
+
 function Player.server_onCreate( self )
 	self.sv = {}
 	self.sv.saved = self.storage:load()
