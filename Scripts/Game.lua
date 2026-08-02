@@ -194,14 +194,13 @@ function Game:client_onCreate()
 	self.cl_time_progress = true
 	self.cl_time = 0.3
 
-	if g_beaconManager == nil then
-		g_beaconManager = BeaconManager()
-	end
-
 	if g_unitManager == nil then
 		g_unitManager = UnitManager()
 	end
 
+	if g_beaconManager == nil then
+		g_beaconManager = BeaconManager()
+	end
 	g_beaconManager:cl_onCreate()
 
 	g_radioTransmitter = sm.effect.createEffect( "Radio - Transmitter" )
@@ -213,6 +212,26 @@ function Game:client_onCreate()
 	g_survivalHud:setVisible("StatusPanel", false)
 	g_survivalHud:setVisible("BreathPanel", false)
 	g_survivalHud:setVisible("BindingPanel", false)
+
+	self.cl_compass_enabled = sm.game.getSettingBoolean("CompassHud")
+	g_compassHud = sm.gui.createCompassHudGui()
+	self:cl_compassHudEnable( self.cl_compass_enabled )
+end
+
+function Game:cl_compassHudEnable( enable )
+	if enable == true then
+		g_compassHud:open()
+	else
+		g_compassHud:close()
+	end
+end
+
+function Game:client_onFixedUpdate()
+	local compassSetting = sm.game.getSettingBoolean( "CompassHud" )
+	if self.cl_compass_enabled ~= compassSetting then
+		self.cl_compass_enabled = compassSetting
+		self:cl_compassHudEnable(self.cl_compass_enabled)
+	end
 end
 
 local GAME_DAYCYCLE_TIME = 900.0
