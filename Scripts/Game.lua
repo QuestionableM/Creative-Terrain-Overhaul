@@ -138,6 +138,8 @@ function Game:client_onLoadingScreenLifted()
 	if self.cl_new_version_available ~= nil then
 		self:client_displayNewVersionAvailableMsg()
 	end
+
+	EffectManager.Cl_OnLoadingScreenLifted()
 end
 
 --[[function Game:client_onRefresh()

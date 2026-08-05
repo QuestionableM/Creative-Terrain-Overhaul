@@ -106,6 +106,7 @@ end
 function World:client_onCellLoaded(x, y)
 	self.fireManager:cl_onCellLoaded(x, y)
 	self.waterManager:cl_onCellLoaded(x, y)
+	EffectManager.Cl_AlertOnWorldLoadCell( self.world, x, y )
 	AmbienceManager.Cl_OnCellLoaded( self.world, x, y )
 	RenderSettingsManager.Cl_onCellLoaded( x, y )
 end
@@ -122,6 +123,7 @@ end
 
 function World:client_onCellUnloaded(x, y)
 	self.waterManager:cl_onCellUnloaded(x, y)
+	EffectManager.Cl_AlertOnWorldUnloadCell( self.world, x, y )
 	AmbienceManager.Cl_OnCellUnloaded( self.world, x, y )
 	RenderSettingsManager.Cl_onCellUnloaded( x, y )
 end
