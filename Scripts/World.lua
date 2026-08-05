@@ -162,7 +162,13 @@ function World:server_onProjectile(hitPos, hitTime, hitVelocity, _, attacker, da
 		sm.message.send(MESSAGE_TYPES.GENERAL.ProjectileHit, { world = self.world, position = hitPos, attacker = attacker })
 	elseif projectileUuid == projectile_clay then
 		local clayMaterial = 0
-		self.world:voxelDensityAddition(hitPos, hitNormal, 2.5, 5, clayMaterial, sm.world.voxelFilter.all, attacker)
+
+		local voxelCreator = nil
+		if type(attacker) == "Player" then
+			voxelCreator = attacker
+		end
+
+		self.world:voxelDensityAddition(hitPos, hitNormal, 2.5, 5, clayMaterial, sm.world.voxelFilter.all, voxelCreator)
 	elseif projectileUuid == projectile_pesticide then
 		local forward = sm.vec3.new( 0, 1, 0 )
 		local randomDir = forward:rotateZ( math.rad( math.random( 0, 359 ) ) )
